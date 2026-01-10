@@ -1,6 +1,7 @@
 import pytest
-from ABRLExact.environment import fourDMDP
-from ABRLExact.CDFAgent import exact_solution
+import numpy as np
+from ABRLExact.environment import fourDMDP, DeepSea
+from ABRLExact.CDFAgent import exact_solution, run_exact_deepsea
 
 def test_exact_solution_fourDMDP():
     # Setup environment and observations
@@ -155,3 +156,19 @@ def test_exact_solution_fourDMDP_repeated_obs():
     action_q_list3 = [2,5]
     result3 = exact_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=state_q_list3, action_q_list=action_q_list3)
     assert result3 == pytest.approx(0.0, abs=1e-6)
+
+def test_run_exact_deepsea():
+    env = DeepSea(depth=3, 
+            starting_state=(0,0), 
+            goal_state=(-1,-1), 
+            deterministic_transition=True, 
+            randomised_actions=True, 
+            randomised_action_seed=None, 
+            penalty=0.02,
+            sto_trans_prob=None)
+
+    state_history, (all_probs, action_map), (all_paths, all_optimal_path_probs, deterministic_transition), reward_history, obs_history = run_exact_deepsea(  # pylint: disable=unused-variable
+        env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=True, qmc_sobol_power=14, output_obs=True, save_path=None, disable_tqdm=True)
+
+    idx = np.argmax(all_optimal_path_probs[-1]).item()
+    assert np.all([(all_paths[idx][i][0] == (i,i)) & (all_paths[idx][i][1] != action_map[i,i].item()) for i in range(len(all_paths[idx]))])

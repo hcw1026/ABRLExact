@@ -10,7 +10,7 @@ from omegaconf import OmegaConf
 from ABRLExact.environment import DeepSea, DeepSeaPyramid, DeepSeaSwirl
 from ABRLExact.CDFAgent import run_exact_deepsea
 
-def worker_map(args):
+def worker_map(args): # pylint: disable=redefined-outer-name
     _, env_generator, kwargs = args # pylint: disable=redefined-outer-name
     if callable(env_generator):
         env = env_generator()
@@ -20,7 +20,7 @@ def worker_map(args):
 
 
 def run_parallel_exact_deepsea(num_experiments, env_generator, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, # pylint: disable=redefined-outer-name
-                               output_obs=False, save_dir=None, n_jobs=None): 
+                               output_obs=False, batch_size=1024, save_dir=None, n_jobs=None): # pylint: disable=redefined-outer-name
 
     if n_jobs is None:
         try:
@@ -38,7 +38,8 @@ def run_parallel_exact_deepsea(num_experiments, env_generator, epsilon=0.02, sig
         "use_qmc": use_qmc,
         "qmc_sobol_power": qmc_sobol_power,
         "output_obs": output_obs,
-        "disable_tqdm": True
+        "disable_tqdm": True,
+        "batch_size": batch_size
     }
 
     tasks = []
@@ -138,6 +139,8 @@ if __name__ == "__main__":
     parser.add_argument("config", type=str, nargs="?", default="config.yaml", help="Path to the YAML configuration file.")
     parser.add_argument("--base_dir", type=str, default="./results", help="Base directory for results.")
     parser.add_argument("--n_jobs", type=int, default=1, help="Number of parallel jobs (cores) to use.")
+    parser.add_argument("--batch_size", type=int, default=1024, help="Batch size for exact solution computation.")
+    
     args = parser.parse_args()
     
     base_dir = args.base_dir
@@ -171,6 +174,7 @@ if __name__ == "__main__":
             use_qmc=config["use_qmc"],
             qmc_sobol_power=config["qmc_sobol_power"],
             output_obs=config["output_obs"],
+            batch_size=args.batch_size,
             save_dir=save_dir,
             n_jobs=args.n_jobs
         )
