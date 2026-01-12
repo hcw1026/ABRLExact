@@ -2,7 +2,7 @@ import os
 import datetime
 import argparse
 from functools import partial
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 
 import multiprocessing
 from omegaconf import OmegaConf
@@ -10,8 +10,17 @@ from omegaconf import OmegaConf
 from ABRLExact.environment import DeepSea, DeepSeaPyramid, DeepSeaSwirl
 from ABRLExact.CDFAgent import run_exact_deepsea
 
+worker_id = 0
+
+def init_worker(queue):
+    global worker_id # pylint: disable=global-statement
+    worker_id = queue.get()
+
 def worker_map(args): # pylint: disable=redefined-outer-name
     _, env_generator, kwargs = args # pylint: disable=redefined-outer-name
+    kwargs["disable_tqdm"] = False
+    kwargs["tqdm_position"] = worker_id + 1
+
     if callable(env_generator):
         env = env_generator()
     else:
@@ -38,7 +47,6 @@ def run_parallel_exact_deepsea(num_experiments, env_generator, epsilon=0.02, sig
         "use_qmc": use_qmc,
         "qmc_sobol_power": qmc_sobol_power,
         "output_obs": output_obs,
-        "disable_tqdm": True,
         "batch_size": batch_size
     }
 
@@ -53,8 +61,13 @@ def run_parallel_exact_deepsea(num_experiments, env_generator, epsilon=0.02, sig
 
     print(f"Starting {num_experiments} experiments on {n_jobs} cores...")
 
-    with multiprocessing.Pool(processes=n_jobs) as pool:
-        output = list(tqdm(pool.imap(worker_map, tasks), total=num_experiments, desc="Parallel Experiments"))
+    m = multiprocessing.Manager()
+    q = m.Queue()
+    for i in range(n_jobs):
+        q.put(i)
+
+    with multiprocessing.Pool(processes=n_jobs, initializer=init_worker, initargs=(q,)) as pool:
+        output = list(tqdm(pool.imap(worker_map, tasks), total=num_experiments, desc="Parallel Experiments", position=0))
 
     return output
 

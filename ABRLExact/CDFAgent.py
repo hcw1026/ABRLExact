@@ -2,7 +2,7 @@ import time
 
 from copy import deepcopy
 import itertools
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 
 import numpy as np
 from scipy import stats
@@ -397,7 +397,7 @@ def exact_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, ac
 
 
 
-def run_exact_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, output_obs=False, batch_size=1024, save_path=None, disable_tqdm=False):
+def run_exact_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, output_obs=False, batch_size=1024, save_path=None, disable_tqdm=False, tqdm_position=None):
 
     # get all paths
     if env.deterministic_transition is True:
@@ -450,9 +450,11 @@ def run_exact_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=Fals
     all_probs.append(probs_vec)
 
     new_flag = True # store flag of whether new observations have been added
+    
 
     # main loop
-    for _ in tqdm(range(num_episodes), disable=disable_tqdm):
+    tqdm_desc = f"Worker {tqdm_position}" if tqdm_position is not None else None
+    for _ in tqdm(range(num_episodes), disable=disable_tqdm, position=tqdm_position, desc=tqdm_desc, leave=False):
         curr_state = (0, 0)
         history = [curr_state]
         reward_acc = []
