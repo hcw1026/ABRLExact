@@ -7,6 +7,7 @@ CONFIG_FILES=(
 BASE_DIR="./data"
 N_JOBS=10
 BATCH_SIZE=1024
+NUM_EXPERIMENTS=10
 
 EPSILONS=(0.01 0.1 1.0 5.0)
 
@@ -20,6 +21,7 @@ for config in "${CONFIG_FILES[@]}"; do
             --base_dir "$BASE_DIR" \
             --n_jobs "$N_JOBS" \
             --epsilon "$eps" \
-            --batch_size "$BATCH_SIZE"
+            --batch_size "$BATCH_SIZE"\
+            --num_experiments "$NUM_EXPERIMENTS"
     done
 done
