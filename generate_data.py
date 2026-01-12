@@ -140,6 +140,7 @@ if __name__ == "__main__":
     parser.add_argument("--base_dir", type=str, default="./results", help="Base directory for results.")
     parser.add_argument("--n_jobs", type=int, default=1, help="Number of parallel jobs (cores) to use.")
     parser.add_argument("--batch_size", type=int, default=1024, help="Batch size for exact solution computation.")
+    parser.add_argument("--epsilon", type=float, default=None, help="Override epsilon value from config.")
     
     args = parser.parse_args()
     
@@ -150,6 +151,9 @@ if __name__ == "__main__":
         exit(1)
 
     omega_config = OmegaConf.load(args.config)
+
+    if args.epsilon is not None:
+        omega_config.epsilon = args.epsilon
     
     config, env_generator = configure_experiment(omega_config)
     existing_run = find_existing_run(base_dir, config)
