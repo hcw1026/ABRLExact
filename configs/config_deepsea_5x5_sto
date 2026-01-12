@@ -8,7 +8,6 @@ randomised_actions: true
 randomised_action_seed: null
 
 # Experiment settings
-num_experiments: 20
 epsilon: 0.01
 sigma: 10
 num_episodes: 100
