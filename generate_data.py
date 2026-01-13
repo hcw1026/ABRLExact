@@ -216,14 +216,14 @@ if __name__ == "__main__":
         "n_jobs": args.n_jobs
     }
 
-    if config['method'] == 'cdf':
+    if config['method'].lower() == 'cdf':
         runner_params.update({
             "use_qmc": config["use_qmc"],
             "qmc_sobol_power": config["qmc_sobol_power"],
             "batch_size": args.batch_size
         })
         runner = run_parallel_cdf_deepsea
-    elif config['method'] == 'hmc':
+    elif config['method'].lower() == 'hmc':
         input_obs_data = None
         if config.get("input_obs") is not None:
             input_obs_path = config["input_obs"]
