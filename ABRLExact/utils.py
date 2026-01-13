@@ -26,6 +26,19 @@ def sample_path_with_prob(all_paths, path_probs):#, deterministic_path=True):
     return policy, path_probs
 
 
+def compute_q_optimal_probs(samples, all_paths, env):
+    samples_optim_prob = np.zeros(len(all_paths))
+    for p, path in enumerate(all_paths):
+        samples_mask = np.zeros(len(samples), dtype=np.bool)
+        for num, sample in enumerate(samples):
+            mask = True
+            for state, action in path:
+                mask = mask & np.all(sample[env.nu(state, action)-1] > sample[env.nu(state, 1-action)-1])
+            samples_mask[num] = mask
+        samples_optim_prob[p] = np.mean(samples_mask)
+    return samples_optim_prob
+
+
 def add_obs(obs, unique_stat, state0, action, state1, reward, done):
     tr_id = (*state0, action)
     added_flag = False
