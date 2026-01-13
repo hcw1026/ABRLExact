@@ -9,7 +9,7 @@ import multiprocessing
 from omegaconf import OmegaConf
 
 from ABRLExact.environment import DeepSea, DeepSeaPyramid, DeepSeaSwirl
-from ABRLExact.CDFAgent import run_exact_deepsea
+from ABRLExact.CDFAgent import run_cdf_deepsea
 from ABRLExact.HMCAgent import run_hmc_deepsea
 
 worker_id = 0
@@ -63,7 +63,7 @@ def run_parallel_experiment(num_experiments, env_generator, experiment_runner, b
     return output
 
 
-def run_parallel_exact_deepsea(num_experiments, env_generator, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, # pylint: disable=redefined-outer-name
+def run_parallel_cdf_deepsea(num_experiments, env_generator, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, # pylint: disable=redefined-outer-name
                                output_obs=False, batch_size=1024, save_dir=None, n_jobs=None, start_idx=0): # pylint: disable=redefined-outer-name
     base_kwargs = {
         "epsilon": epsilon,
@@ -74,7 +74,7 @@ def run_parallel_exact_deepsea(num_experiments, env_generator, epsilon=0.02, sig
         "output_obs": output_obs,
         "batch_size": batch_size
     }
-    return run_parallel_experiment(num_experiments=num_experiments, env_generator=env_generator, experiment_runner=run_exact_deepsea, 
+    return run_parallel_experiment(num_experiments=num_experiments, env_generator=env_generator, experiment_runner=run_cdf_deepsea, 
                                    base_kwargs=base_kwargs, save_dir=save_dir, n_jobs=n_jobs, start_idx=start_idx)
 
 
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     parser.add_argument("config", type=str, nargs="?", default="config.yaml", help="Path to the YAML configuration file.")
     parser.add_argument("--base_dir", type=str, default="./results", help="Base directory for results.")
     parser.add_argument("--n_jobs", type=int, default=1, help="Number of parallel jobs (cores) to use.")
-    parser.add_argument("--batch_size", type=int, default=1024, help="Batch size for exact solution computation.")
+    parser.add_argument("--batch_size", type=int, default=1024, help="Batch size for cdf solution computation.")
     parser.add_argument("--epsilon", type=float, default=None, help="Override epsilon value from config.")
     parser.add_argument("--num_experiments", type=int, default=1, help="Number of experiments to run.")
     parser.add_argument("--disable_hmc_progbar", action="store_true", help="Disable HMC progress bar.")
@@ -216,13 +216,13 @@ if __name__ == "__main__":
         "n_jobs": args.n_jobs
     }
 
-    if config['method'] == 'exact':
+    if config['method'] == 'cdf':
         runner_params.update({
             "use_qmc": config["use_qmc"],
             "qmc_sobol_power": config["qmc_sobol_power"],
             "batch_size": args.batch_size
         })
-        runner = run_parallel_exact_deepsea
+        runner = run_parallel_cdf_deepsea
     elif config['method'] == 'hmc':
         input_obs_data = None
         if config.get("input_obs") is not None:

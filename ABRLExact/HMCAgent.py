@@ -223,7 +223,7 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
                     input_obs=None, disable_tqdm=False, tqdm_position=None, output_obs=False, save_path=None):
 
     unique_stat = set()
-    if input_obs is None: # for experimental use where obs is guided by an external algorithm (e.g. exact)
+    if input_obs is None: # for experimental use where obs is guided by an external algorithm (e.g. cdf)
         obs_provided_flag = False
         obs = {"state0": [], "action": [], "state1": [], "rewards": [], "done": []}
     else:

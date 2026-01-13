@@ -14,7 +14,7 @@ def sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_po
     path_probs = []
     for path in all_paths:
         state_q_list, action_q_list = zip(*path)
-        prob = exact_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=state_q_list, action_q_list=action_q_list,
+        prob = cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=state_q_list, action_q_list=action_q_list,
                              normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size)
         path_probs.append(prob)
 
@@ -99,7 +99,7 @@ def qmc_prep_helper(use_qmc, ell_list, state_q, state_q_list, action_q_list, uni
 
     
     
-def exact_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, action_q_list=None, abseps=1e-5, normalise=True, use_qmc=False, qmc_sobol_power=10, batch_size=1024, profile=False):
+def cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, action_q_list=None, abseps=1e-5, normalise=True, use_qmc=False, qmc_sobol_power=10, batch_size=1024, profile=False):
     '''
     obs: dictionary of state0, action, state1, rewards
     env: initialised MDP class
@@ -397,7 +397,7 @@ def exact_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, ac
 
 
 
-def run_exact_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, output_obs=False, batch_size=1024, save_path=None, disable_tqdm=False, tqdm_position=None):
+def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, output_obs=False, batch_size=1024, save_path=None, disable_tqdm=False, tqdm_position=None):
 
     # get all paths
     if env.deterministic_transition is True:
@@ -446,7 +446,7 @@ def run_exact_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=Fals
     probs_vec = [] 
     for s in env.get_all_states(): # compute initial marginal prob of state optimality
         if s not in env.get_all_terminal_states():
-            probs_vec.append(exact_solution(obs, env, epsilon, sigma, state_q=s)[0][0])
+            probs_vec.append(cdf_solution(obs, env, epsilon, sigma, state_q=s)[0][0])
     all_probs.append(probs_vec)
 
     new_flag = True # store flag of whether new observations have been added
@@ -493,7 +493,7 @@ def run_exact_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=Fals
             mprobs_vec = []
             for s in env.get_all_states():
                 if s not in env.get_all_terminal_states():
-                    mprobs_vec.append(exact_solution(obs, env, epsilon, sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power)[0][0])
+                    mprobs_vec.append(cdf_solution(obs, env, epsilon, sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power)[0][0])
         all_probs.append(mprobs_vec)
 
     # final optimal path prob
