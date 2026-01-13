@@ -360,7 +360,7 @@ def exact_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, ac
                     else: #if it is np.array(None), prob is 0
                         pEstarr_list[action_idx][idx] = 0.
             elif mode == 1:
-                D_ell_star = D_ell_star_list[idx]
+                D_ell_star = D_ell_star_list[idx-start_idx]
                 if (not D_ell_star.shape == ()) and (len(D_ell_star) > 0): #if it is not np.array(None)
                     pEstarr_mean = D_ell_star @ pos_mean_array[idx-start_idx]
                     pEstarr_cov = D_ell_star @ pos_cov_array[idx-start_idx] @ D_ell_star.T
@@ -461,7 +461,7 @@ def run_exact_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=Fals
 
         # rollout
         if new_flag is True:
-            policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=1024)
+            policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size)
         else:
             policy, path_probs = sample_path_with_prob(all_paths, path_probs)
         all_optimal_path_probs.append(path_probs)
