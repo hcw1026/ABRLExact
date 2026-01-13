@@ -223,19 +223,16 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
                     input_obs=None, disable_tqdm=False, tqdm_position=None, output_obs=False, save_path=None):
 
     unique_stat = set()
-    if input_obs is None: # for experimental use where obs is guided by an external algorithm (e.g. cdf)
-        obs_provided_flag = False
-        obs = {"state0": [], "action": [], "state1": [], "rewards": [], "done": []}
-    else:
-        obs_provided_flag = True
-    
-    if output_obs is True:
-        obs_history = [deepcopy(obs)]
+    obs = {"state0": [], "action": [], "state1": [], "rewards": [], "done": []}
 
     state_history = [[]]
     reward_history = [[]]
     parameter_dim = (len(env.get_all_states()) - len(env.get_all_terminal_states())) * 2
     samples_history = []
+    
+    if input_obs is not None: # for experimental use where obs is guided by an external algorithm (e.g. cdf)
+        num_episodes = len(input_obs)
+
     
     tqdm_desc = f"Worker {tqdm_position}" if tqdm_position is not None else None
     for i in tqdm(range(num_episodes), disable=disable_tqdm, position=tqdm_position, desc=tqdm_desc, leave=False):
@@ -243,11 +240,17 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
         history = [curr_state]
         reward_acc = []
 
-        if obs_provided_flag is True:
+        if input_obs is not None: 
             obs = input_obs[i]
+            
+        if output_obs is True: 
+            obs_history = [deepcopy(obs)]
     
-        if i > 0:
-            fitted_diag_std = torch.tensor(np.std(all_q_samples, axis=0, ddof=1))
+        if i > 0 or input_obs is not None:
+            if i == 0:
+                fitted_diag_std = 1.
+            else:
+                fitted_diag_std = torch.tensor(np.std(all_q_samples, axis=0, ddof=1))
             q_sample, step_size, all_q_samples = sample_q_mcmc(obs=obs, env=env, epsilon=epsilon, sigma=sigma, num_samples=num_samples, 
                                                                step_size=step_size, num_steps=num_steps, num_warmup_runs=num_warmup_runs,
                                                                num_warmup_samples_per_run=num_warmup_samples_per_run, fitted_diag_std=fitted_diag_std, 
@@ -262,7 +265,7 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
         while done is False:
             action =  np.argmax(q_sample[env.nu_vectorised(state=[curr_state], action=[0,1]) - 1])
             next_state, reward, done = env.step(action=action, is_simulation=True, simulation_state=curr_state)
-            if obs_provided_flag is False:
+            if input_obs is None:
                 next_state_obs = next_state if env.deterministic_transition else env.transition_distribution(state=curr_state, action=action)
                 add_obs(obs=obs, unique_stat=unique_stat, state0=curr_state, action=action, state1=next_state_obs, reward=reward, done=done)
             curr_state = next_state
@@ -276,16 +279,17 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
         reward_history.append(reward_acc)
         samples_history.append(all_q_samples)
 
+    if input_obs is None:
         if output_obs is True:
             obs_history.append(deepcopy(obs))
 
-    fitted_diag_std = torch.tensor(np.std(all_q_samples, axis=0, ddof=1))
-    q_sample, step_size, all_q_samples = sample_q_mcmc(obs=obs, env=env, epsilon=epsilon, sigma=sigma, num_samples=num_samples, 
-                                                               step_size=step_size, num_steps=num_steps, num_warmup_runs=num_warmup_runs,
-                                                               num_warmup_samples_per_run=num_warmup_samples_per_run, fitted_diag_std=fitted_diag_std, 
-                                                               target_acc_prob=target_acc_prob, step_size_rates=step_size_rates, 
-                                                               disable_progbar=disable_progbar)
-    samples_history.append(all_q_samples)
+        fitted_diag_std = torch.tensor(np.std(all_q_samples, axis=0, ddof=1))
+        q_sample, step_size, all_q_samples = sample_q_mcmc(obs=obs, env=env, epsilon=epsilon, sigma=sigma, num_samples=num_samples, 
+                                                                step_size=step_size, num_steps=num_steps, num_warmup_runs=num_warmup_runs,
+                                                                num_warmup_samples_per_run=num_warmup_samples_per_run, fitted_diag_std=fitted_diag_std, 
+                                                                target_acc_prob=target_acc_prob, step_size_rates=step_size_rates, 
+                                                                disable_progbar=disable_progbar)
+        samples_history.append(all_q_samples)
     
     if save_path is not None:
         save_dict = {
@@ -302,4 +306,3 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
         return state_history, reward_history, samples_history, obs_history
     else:
         return state_history, reward_history, samples_history
-

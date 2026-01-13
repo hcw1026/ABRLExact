@@ -233,7 +233,7 @@ if __name__ == "__main__":
                     input_obs_data = data["obs_history"]
                 else:
                     raise ValueError(f"'obs_history' not found in {input_obs_path}")
-            except Exception as e:
+            except Exception as e: # pylint: disable=broad-exception-caught
                 print(f"Error loading input_obs file: {e}")
                 exit(1)
 

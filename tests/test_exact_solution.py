@@ -4,7 +4,6 @@ from ABRLExact.environment import fourDMDP, DeepSea
 from ABRLExact.CDFAgent import cdf_solution, run_cdf_deepsea
 
 def test_cdf_solution_fourDMDP():
-    # Setup environment and observations
     env = fourDMDP()
     obs = dict()
     obs["state0"] = [1, 1, 2, 2, 3]
