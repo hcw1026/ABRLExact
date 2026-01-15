@@ -43,23 +43,22 @@ for i in "${!EPSILONS[@]}"; do
         --n_jobs "$N_JOBS" \
         --epsilon "$eps" \
         --step_size "$step" \
-        --num_experiments "$NUM_EXPERIMENTS"
+        --num_experiments "$NUM_EXPERIMENTS" \
+        --disable_hmc_progbar
 done
 
 
 DEEPSEAPYRAMID_CONFIG="configs/config_deepseapyramid_5x5_det.yaml"
 
-for eps in "${EPSILONS[@]}"; do
-    echo "----------------------------------------------------------------"
-    echo "Running Experiment: Config=$DEEPSEAPYRAMID_CONFIG"
-    echo "----------------------------------------------------------------"
-    
-    python generate_data.py "$DEEPSEAPYRAMID_CONFIG" \
-        --base_dir "$BASE_DIR" \
-        --n_jobs "$N_JOBS" \
-        --batch_size "$BATCH_SIZE"\
-        --num_experiments "$NUM_EXPERIMENTS"
-done
+echo "----------------------------------------------------------------"
+echo "Running Experiment: Config=$DEEPSEAPYRAMID_CONFIG"
+echo "----------------------------------------------------------------"
+
+python generate_data.py "$DEEPSEAPYRAMID_CONFIG" \
+    --base_dir "$BASE_DIR" \
+    --n_jobs "$N_JOBS" \
+    --batch_size "$BATCH_SIZE"\
+    --num_experiments "$NUM_EXPERIMENTS"
 
 
 DEEPSEASWIRL_CONFIG="configs/config_deepseaswirl_5x5_det.yaml"
