@@ -26,6 +26,7 @@ for config in "${CONFIG_FILES[@]}"; do
     done
 done
 
+
 HMC_CONFIG="configs/config_deepsea_5x5_det_hmc.yaml"
 STEPSIZES=(0.0001 0.005 0.05 0.1)
 
@@ -42,6 +43,36 @@ for i in "${!EPSILONS[@]}"; do
         --n_jobs "$N_JOBS" \
         --epsilon "$eps" \
         --step_size "$step" \
-        --batch_size "$BATCH_SIZE" \
+        --num_experiments "$NUM_EXPERIMENTS"
+done
+
+
+DEEPSEAPYRAMID_CONFIG="configs/config_deepseapyramid_5x5_det.yaml"
+
+for eps in "${EPSILONS[@]}"; do
+    echo "----------------------------------------------------------------"
+    echo "Running Experiment: Config=$DEEPSEAPYRAMID_CONFIG"
+    echo "----------------------------------------------------------------"
+    
+    python generate_data.py "$DEEPSEAPYRAMID_CONFIG" \
+        --base_dir "$BASE_DIR" \
+        --n_jobs "$N_JOBS" \
+        --batch_size "$BATCH_SIZE"\
+        --num_experiments "$NUM_EXPERIMENTS"
+done
+
+
+DEEPSEASWIRL_CONFIG="configs/config_deepseaswirl_5x5_det.yaml"
+
+for eps in "${EPSILONS[@]}"; do
+    echo "----------------------------------------------------------------"
+    echo "Running Experiment: Config=$DEEPSEASWIRL_CONFIG, Epsilon=$eps"
+    echo "----------------------------------------------------------------"
+    
+    python generate_data.py "$DEEPSEASWIRL_CONFIG" \
+        --base_dir "$BASE_DIR" \
+        --n_jobs "$N_JOBS" \
+        --epsilon "$eps" \
+        --batch_size "$BATCH_SIZE"\
         --num_experiments "$NUM_EXPERIMENTS"
 done
