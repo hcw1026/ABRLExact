@@ -19,7 +19,7 @@ def test_hmc_deepsea_guided():
                 next_state, reward, done = env.step(action=action, is_simulation=True, simulation_state=state)
                 add_obs(obs=obs, unique_stat=set(), state0=state, action=action, state1=next_state, reward=reward, done=done)
     
-    hmc_state_history, hmc_reward_history, samples_history = run_hmc_deepsea(env, epsilon=epsilon, sigma=sigma, num_episodes=10, num_samples=1000, 
+    hmc_state_history, hmc_reward_history, samples_history, _ = run_hmc_deepsea(env, epsilon=epsilon, sigma=sigma, num_episodes=10, num_samples=1000, 
                                                                          num_warmup_runs=2, num_warmup_samples_per_run=10, target_acc_prob=0.75, 
                                                                          step_size_rates=(1.3, 0.7, 1.1, 0.8), step_size=0.1, num_steps=10, 
                                                                          disable_progbar=False, input_obs=[obs], output_obs=False)

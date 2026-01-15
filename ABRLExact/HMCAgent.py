@@ -214,7 +214,8 @@ def sample_q_mcmc(obs, env, epsilon, sigma, num_samples, step_size, num_steps, n
     samples = all_samples[-1]
 
     step_size = pyro_mcmc.kernel.step_size
-    return samples.numpy(), step_size, all_samples.numpy()
+    accept_prob = pyro_mcmc.diagnostics()["acceptance rate"]["chain 0"]
+    return samples.numpy(), step_size, all_samples.numpy(), accept_prob
 
 
 def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=100, 
@@ -229,6 +230,7 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
     reward_history = [[]]
     parameter_dim = (len(env.get_all_states()) - len(env.get_all_terminal_states())) * 2
     samples_history = []
+    acc_prob_history = []
     
     if input_obs is not None: # for experimental use where obs is guided by an external algorithm (e.g. cdf)
         num_episodes = len(input_obs)
@@ -251,7 +253,7 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
                 fitted_diag_std = 1.
             else:
                 fitted_diag_std = torch.tensor(np.std(all_q_samples, axis=0, ddof=1))
-            q_sample, step_size, all_q_samples = sample_q_mcmc(obs=obs, env=env, epsilon=epsilon, sigma=sigma, num_samples=num_samples, 
+            q_sample, step_size, all_q_samples, acc_prob = sample_q_mcmc(obs=obs, env=env, epsilon=epsilon, sigma=sigma, num_samples=num_samples, 
                                                                step_size=step_size, num_steps=num_steps, num_warmup_runs=num_warmup_runs,
                                                                num_warmup_samples_per_run=num_warmup_samples_per_run, fitted_diag_std=fitted_diag_std, 
                                                                target_acc_prob=target_acc_prob, step_size_rates=step_size_rates, 
@@ -260,6 +262,9 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
         else:
             all_q_samples = np.random.randn(num_samples, parameter_dim) * sigma
             q_sample = all_q_samples[0]
+            acc_prob = 1.
+            
+        acc_prob_history.append(acc_prob)
         
         done = False
         while done is False:
@@ -284,18 +289,22 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
             obs_history.append(deepcopy(obs))
 
         fitted_diag_std = torch.tensor(np.std(all_q_samples, axis=0, ddof=1))
-        q_sample, step_size, all_q_samples = sample_q_mcmc(obs=obs, env=env, epsilon=epsilon, sigma=sigma, num_samples=num_samples, 
+        q_sample, step_size, all_q_samples, acc_prob = sample_q_mcmc(obs=obs, env=env, epsilon=epsilon, sigma=sigma, num_samples=num_samples, 
                                                                 step_size=step_size, num_steps=num_steps, num_warmup_runs=num_warmup_runs,
                                                                 num_warmup_samples_per_run=num_warmup_samples_per_run, fitted_diag_std=fitted_diag_std, 
                                                                 target_acc_prob=target_acc_prob, step_size_rates=step_size_rates, 
                                                                 disable_progbar=disable_progbar)
         samples_history.append(all_q_samples)
+        acc_prob_history.append(acc_prob)
     
     if save_path is not None:
         save_dict = {
             "state_history": state_history,
             "reward_history": reward_history,
-            "samples_history": samples_history
+            "samples_history": samples_history,
+            "env_data": (env.action_map, env.deterministic_transition),
+            "acc_prob_history": acc_prob_history
+
         }
         if output_obs:
             save_dict["obs_history"] = obs_history
@@ -303,6 +312,6 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
         np.save(save_path, save_dict)
 
     if output_obs:
-        return state_history, reward_history, samples_history, obs_history
+        return state_history, reward_history, samples_history, acc_prob_history, obs_history
     else:
-        return state_history, reward_history, samples_history
+        return state_history, reward_history, samples_history, acc_prob_history
