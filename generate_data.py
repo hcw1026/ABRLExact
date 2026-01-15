@@ -185,6 +185,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_jobs", type=int, default=1, help="Number of parallel jobs (cores) to use.")
     parser.add_argument("--batch_size", type=int, default=1024, help="Batch size for cdf solution computation.")
     parser.add_argument("--epsilon", type=float, default=None, help="Override epsilon value from config.")
+    parser.add_argument("--step_size", type=float, default=None, help="Override step_size value from config.")
     parser.add_argument("--num_experiments", type=int, default=1, help="Number of experiments to run.")
     parser.add_argument("--disable_hmc_progbar", action="store_true", help="Disable HMC progress bar.")
     
@@ -200,6 +201,9 @@ if __name__ == "__main__":
 
     if args.epsilon is not None:
         omega_config.epsilon = args.epsilon
+
+    if args.step_size is not None:
+        omega_config.step_size = args.step_size
     
     config, env_generator = configure_experiment(omega_config)
     existing_run = find_existing_run(base_dir, config)
