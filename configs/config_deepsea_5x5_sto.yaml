@@ -13,5 +13,5 @@ epsilon: 0.01
 sigma: 10
 num_episodes: 100
 use_qmc: true
-qmc_sobol_power: 16
+qmc_sobol_power: 15
 output_obs: true
