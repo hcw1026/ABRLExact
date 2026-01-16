@@ -10,12 +10,13 @@ from scipy import stats
 from ABRLExact.utils import sample_path_with_prob, add_obs
 
 
-def sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, batch_size=1024):
+def sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, batch_size=1024, cache=None):
     path_probs = []
+    internal_cache = cache if cache is not None else {}
     for path in all_paths:
         state_q_list, action_q_list = zip(*path)
         prob = cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=state_q_list, action_q_list=action_q_list,
-                             normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size)
+                             normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=internal_cache)
         path_probs.append(prob)
 
     path_probs = np.array(path_probs)
@@ -99,7 +100,7 @@ def qmc_prep_helper(use_qmc, ell_list, state_q, state_q_list, action_q_list, uni
 
     
     
-def cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, action_q_list=None, abseps=1e-5, normalise=True, use_qmc=False, qmc_sobol_power=10, batch_size=1024, profile=False):
+def cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, action_q_list=None, abseps=1e-5, normalise=True, use_qmc=False, qmc_sobol_power=10, batch_size=1024, profile=False, cache=None):
     '''
     obs: dictionary of state0, action, state1, rewards
     env: initialised MDP class
@@ -108,6 +109,8 @@ def cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, acti
     state_q: If query is for the probability of optimality of actions of a given state_q, set state_q
     state_q_list: If query is for the probability of optimality of a sequence of state action pairs, set state_q_list and action_q_list instead, and keep state_q as None
     action_q_list: same as state_q_list
+    cache: to be used for future runs when everything but state_q_list and action_q_list remain the same. If None, no cache will be used and no cache will be returned; else cache
+           cached data will also be returned (incl. if cache is False). If cache is a dictionary containing "pr_vec", "pos_mean_vec", "pos_cov_vec", cache data will be used for computation
     '''
     
     
@@ -185,7 +188,22 @@ def cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, acti
 
     num_batches = int(np.ceil(len(ell_list) / batch_size))
     
-    pr_vec = np.zeros(len(ell_list))
+    # cache to be reused if all but state_q_list and action_q_list remain the same
+    cached_data = False
+    full_pos_mean_list = None
+    full_pos_cov_list = None
+    full_pos_mean = None
+    full_pos_cov = None
+    if cache is not None and "pos_mean_array" in cache and "pos_cov_array" in cache and "pr_vec" in cache:
+        cached_data = True
+        pr_vec = cache["pr_vec"]
+        full_pos_mean = cache["pos_mean_array"]
+        full_pos_cov = cache["pos_cov_array"]
+    else:
+        pr_vec = np.zeros(len(ell_list))
+        if cache is not None:
+            full_pos_mean_list = []
+            full_pos_cov_list = []
 
     # Get pEr and pEsr
     pEr_vec = np.zeros(len(ell_list))
@@ -211,48 +229,57 @@ def cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, acti
         tt = time.time() ###
 
     for i in range(num_batches):
-        B_ell_list = []
         start_idx = i * batch_size
         end_idx = min((i + 1) * batch_size, len(ell_list))
-        for idx in range(start_idx, end_idx):
-            ell = ell_list[idx]
-            
-            # first term
-            B_ell = np.zeros([n, theta_len])
-            if n > 0:
-                B_ell[np.arange(n), np.array(env.nu_vectorised(state=obs["state0"], action=obs["action"])) - 1] += 1
 
-            # second term
-            if len(flat_row_idx) > 0:
-                flat_col_idx = np.array(env.nu_vectorised(state=flat_next_states, action=ell[flat_next_ell_idx])) - 1
-                np.add.at(B_ell, (flat_row_idx, flat_col_idx), - flat_probs)
-
-            B_ell_list.append(B_ell)
-
-        if profile:
-            print(f"Zone B {time.time() - tt} at batch {i}/{num_batches}") ###
-            tt = time.time() ###
-
+        if not cached_data:
+            B_ell_list = []
+            for idx in range(start_idx, end_idx):
+                ell = ell_list[idx]
                 
-        if len(obs["rewards"]) > 0:
-            B_batch = np.stack(B_ell_list)
-            
-            Gamma_inv_batch = (sigma**2) * (B_batch @ B_batch.transpose(0, 2, 1)) + (epsilon**2) * np.eye(n)
-            Gamma_batch = np.linalg.inv(Gamma_inv_batch)
+                # first term
+                B_ell = np.zeros([n, theta_len])
+                if n > 0:
+                    B_ell[np.arange(n), np.array(env.nu_vectorised(state=obs["state0"], action=obs["action"])) - 1] += 1
 
-            _, log_det = np.linalg.slogdet(Gamma_inv_batch)
-            quad_term = (Gamma_batch @ obs["rewards"] * obs["rewards"]).sum(axis=1)
-            pr_vec[start_idx:end_idx] = np.exp( -0.5 * (n * np.log(2 * np.pi) + log_det + quad_term)) # p^ell(r1:n)
+                # second term
+                if len(flat_row_idx) > 0:
+                    flat_col_idx = np.array(env.nu_vectorised(state=flat_next_states, action=ell[flat_next_ell_idx])) - 1
+                    np.add.at(B_ell, (flat_row_idx, flat_col_idx), - flat_probs)
 
-            #Get p(theta|r)
-            pos_cov_ = B_batch.transpose(0, 2, 1) @ Gamma_batch
-            pos_mean_array = (sigma**2) * pos_cov_  @ obs["rewards"] # posterior mean of p^ell(theta|r1:n)
-            pos_cov_array = (sigma**2) * np.eye(theta_len) - (sigma**4) * (pos_cov_ @ B_batch) # posterior covariance of p^ell(theta|r1:n)
+                B_ell_list.append(B_ell)
+
+            if profile:
+                print(f"Zone B {time.time() - tt} at batch {i}/{num_batches}") ###
+                tt = time.time() ###
+
+                    
+            if len(obs["rewards"]) > 0:
+                B_batch = np.stack(B_ell_list)
+                
+                Gamma_inv_batch = (sigma**2) * (B_batch @ B_batch.transpose(0, 2, 1)) + (epsilon**2) * np.eye(n)
+                Gamma_batch = np.linalg.inv(Gamma_inv_batch)
+
+                _, log_det = np.linalg.slogdet(Gamma_inv_batch)
+                quad_term = (Gamma_batch @ obs["rewards"] * obs["rewards"]).sum(axis=1)
+                pr_vec[start_idx:end_idx] = np.exp( -0.5 * (n * np.log(2 * np.pi) + log_det + quad_term)) # p^ell(r1:n)
+
+                #Get p(theta|r)
+                pos_cov_ = B_batch.transpose(0, 2, 1) @ Gamma_batch
+                pos_mean_array = (sigma**2) * pos_cov_  @ obs["rewards"] # posterior mean of p^ell(theta|r1:n)
+                pos_cov_array = (sigma**2) * np.eye(theta_len) - (sigma**4) * (pos_cov_ @ B_batch) # posterior covariance of p^ell(theta|r1:n)
+                
+            else:
+                pos_mean_array = np.zeros((1, theta_len))
+                pos_cov_array = np.array([sigma**2 * np.eye(theta_len)])
+                pr_vec[0] = 1.
             
+            if cache is not None:
+                full_pos_mean_list.append(pos_mean_array)
+                full_pos_cov_list.append(pos_cov_array)
         else:
-            pos_mean_array = np.zeros((1, theta_len))
-            pos_cov_array = np.array([sigma**2 * np.eye(theta_len)])
-            pr_vec[0] = 1.
+            pos_mean_array = full_pos_mean[start_idx:end_idx]
+            pos_cov_array = full_pos_cov[start_idx:end_idx]
 
         if profile:
             print(f"Zone C {time.time() - tt} at batch {i}/{num_batches}") ###
@@ -375,6 +402,11 @@ def cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, acti
     if profile:
         print(f"Zone E {time.time() - tt}") ###
         
+    if cache is not None and not cached_data:
+        cache["pos_mean_array"] = np.concatenate(full_pos_mean_list, axis=0)
+        cache["pos_cov_array"] = np.concatenate(full_pos_cov_list, axis=0)
+        cache["pr_vec"] = pr_vec
+
     # Get final answer
     if mode == 0:
         pEstarr_numer = np.array([np.sum(pr_vec * pEstarr_vec) for pEstarr_vec in pEstarr_list])
@@ -444,9 +476,11 @@ def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False,
 
     # initialise
     probs_vec = [] 
+    obs_cache = {}
     for s in env.get_all_states(): # compute initial marginal prob of state optimality
         if s not in env.get_all_terminal_states():
-            probs_vec.append(cdf_solution(obs, env, epsilon, sigma, state_q=s)[0][0])
+            res = cdf_solution(obs, env, epsilon, sigma, state_q=s, cache=obs_cache)
+            probs_vec.append(res[0][0])
     all_probs.append(probs_vec)
 
     new_flag = True # store flag of whether new observations have been added
@@ -461,7 +495,7 @@ def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False,
 
         # rollout
         if new_flag is True:
-            policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size)
+            policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
         else:
             policy, path_probs = sample_path_with_prob(all_paths, path_probs)
         all_optimal_path_probs.append(path_probs)
@@ -490,15 +524,17 @@ def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False,
 
         # compute marginal prob of state optimality
         if new_flag is True:
+            obs_cache = {}
             mprobs_vec = []
             for s in env.get_all_states():
                 if s not in env.get_all_terminal_states():
-                    mprobs_vec.append(cdf_solution(obs, env, epsilon, sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power)[0][0])
+                    res = cdf_solution(obs, env, epsilon, sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, cache=obs_cache)
+                    mprobs_vec.append(res[0][0])
         all_probs.append(mprobs_vec)
 
     # final optimal path prob
     if new_flag is True:
-        policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size)
+        policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
     else:
         policy, path_probs = sample_path_with_prob(all_paths, path_probs)
     all_optimal_path_probs.append(path_probs)

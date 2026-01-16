@@ -171,3 +171,96 @@ def test_run_cdf_deepsea():
 
     idx = np.argmax(all_optimal_path_probs[-1]).item()
     assert np.all([(all_paths[idx][i][0] == (i,i)) & (all_paths[idx][i][1] != action_map[i,i].item()) for i in range(len(all_paths[idx]))])
+
+def test_cdf_solution_caching_deepsea():
+    env = DeepSea(depth=3, 
+            starting_state=(0,0), 
+            goal_state=(-1,-1), 
+            deterministic_transition=True, 
+            randomised_actions=True, 
+            randomised_action_seed=42, 
+            penalty=0.02,
+            sto_trans_prob=None)
+
+
+    obs = {"state0": [], "action": [], "state1": [], "rewards": [], "done": []}
+    curr_state = (0,0)
+
+    actions = [0, 1] 
+    for action in actions:
+        next_state, reward, done = env.step(action, is_simulation=True, simulation_state=curr_state)
+        obs["state0"].append(curr_state)
+        obs["action"].append(action)
+        obs["state1"].append(next_state)
+        obs["rewards"].append(reward)
+        obs["done"].append(done)
+        curr_state = next_state
+
+    epsilon = 0.02
+    sigma = 10.0
+    
+    state_q_list1 = [(0,0), (1,0)]
+    action_q_list1 = [0, 0]
+    
+    cache = {}
+    prob1 = cdf_solution(obs, env, epsilon, sigma, state_q=None, 
+                                    state_q_list=state_q_list1, action_q_list=action_q_list1, 
+                                    cache=cache)
+    
+    assert "pos_mean_array" in cache
+    assert "pos_cov_array" in cache
+    assert "pr_vec" in cache
+    
+    prob1_cached = cdf_solution(obs, env, epsilon, sigma, state_q=None, 
+                                   state_q_list=state_q_list1, action_q_list=action_q_list1, 
+                                   cache=cache)
+    
+    assert prob1 == pytest.approx(prob1_cached, abs=1e-5)
+    
+    state_q_list2 = [(0,0), (1,1)]
+    action_q_list2 = [1, 1]
+    
+    prob2_cached = cdf_solution(obs, env, epsilon, sigma, state_q=None, 
+                                   state_q_list=state_q_list2, action_q_list=action_q_list2, 
+                                   cache=cache)
+    
+    prob2_uncached = cdf_solution(obs, env, epsilon, sigma, state_q=None, 
+                                  state_q_list=state_q_list2, action_q_list=action_q_list2)
+    
+    assert prob2_cached == pytest.approx(prob2_uncached, abs=1e-5)
+
+def test_cdf_solution_caching_state_q_change_deepsea():
+    """
+    Test that caching works when the query 'state_q' changes (Mode 0), 
+    verifying that the cached posterior is valid for different queries.
+    """
+    env = DeepSea(depth=3, 
+            starting_state=(0,0), 
+            goal_state=(-1,-1), 
+            deterministic_transition=True, 
+            randomised_actions=True, 
+            randomised_action_seed=42, 
+            penalty=0.02,
+            sto_trans_prob=None)
+
+    obs = {"state0": [], "action": [], "state1": [], "rewards": [], "done": []}
+    curr_state = (0,0)
+    action = 0
+    next_state, reward, done = env.step(action, is_simulation=True, simulation_state=curr_state)
+    obs["state0"].append(curr_state)
+    obs["action"].append(action)
+    obs["state1"].append(next_state)
+    obs["rewards"].append(reward)
+    obs["done"].append(done)
+
+    epsilon = 0.02
+    sigma = 10.0
+    
+    cache = {}
+    _, _ = cdf_solution(obs, env, epsilon, sigma, state_q=(0,0), cache=cache)
+    
+    probs_cached, _ = cdf_solution(obs, env, epsilon, sigma, state_q=(1,0), cache=cache)
+    
+    probs_uncached, _ = cdf_solution(obs, env, epsilon, sigma, state_q=(1,0))
+    
+    assert np.allclose(probs_cached, probs_uncached, atol=1e-5)

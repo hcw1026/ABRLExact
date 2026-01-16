@@ -9,7 +9,7 @@ import torch
 
 
 class DeepSea:
-    def __init__(self, depth, starting_state=(0,0), goal_state=(-1,-1), deterministic_transition=True, randomised_actions=False, 
+    def __init__(self, depth, starting_state=(0,0), goal_state=(-1,-1), deterministic_transition=True, action_map=None, randomised_actions=False, 
                  randomised_action_seed=None, penalty=None, sto_trans_prob=None):
         self.env_name = 'Deepsea'
         self.depth = depth
@@ -26,6 +26,7 @@ class DeepSea:
             self.sto_trans_prob = 1 / depth
         
         self.treasure = 1.
+        self.action_map = action_map
         if randomised_actions:
             np.random.seed(randomised_action_seed)
         
@@ -41,10 +42,13 @@ class DeepSea:
 
     def initialise(self):
 
+        if self.action_map is not None:
+            action_mat = self.action_map
         if self.randomised_actions: # 1 means right=0; 0 means right=1
             action_mat = np.random.binomial(1, 0.5, size=(self.depth, self.depth))
         else:
             action_mat = np.ones([self.depth, self.depth], dtype=np.int32)
+        self.action_map = action_mat
 
         if self.penalty is None:
             reward_ =  np.round(np.array([-1, 1]) / ( 100 * self.depth ), 4) #map action to reward for non goal states
@@ -219,19 +223,22 @@ class DeepSea:
 
 
 class DeepSeaPyramid(DeepSea):
-    def __init__(self, depth, starting_state=(0,0), goal_state=(-1,-1), deterministic_transition=True, randomised_actions=False, 
+    def __init__(self, depth, starting_state=(0,0), goal_state=(-1,-1), deterministic_transition=True, action_map=None, randomised_actions=False, 
                  randomised_action_seed=None, sto_trans_prob=None):
-        super().__init__(depth=depth, starting_state=starting_state, goal_state=goal_state, deterministic_transition=deterministic_transition, 
+        super().__init__(depth=depth, starting_state=starting_state, goal_state=goal_state, deterministic_transition=deterministic_transition, action_map=action_map,
                          randomised_actions=randomised_actions, randomised_action_seed=randomised_action_seed, sto_trans_prob=sto_trans_prob)
         
     def initialise(self):
 
         reward_mat = np.zeros(shape=(self.depth, self.depth, self.action_space.n)) #depth x depth x action_space
 
-        if self.randomised_actions:
+        if self.action_map is not None:
+            action_mat = self.action_map
+        elif self.randomised_actions:
             action_mat = np.random.binomial(1, 0.5, size=(self.depth, self.depth))
         else:
             action_mat = np.ones([self.depth, self.depth], dtype=np.int32)
+        self.action_map = action_mat
 
         trans_mat = np.zeros((self.depth, self.depth, self.action_space.n, 2), dtype='int32')
         for row in range(self.depth):
@@ -257,9 +264,9 @@ class DeepSeaPyramid(DeepSea):
 
 
 class DeepSeaSwirl(DeepSea):
-    def __init__(self, depth, starting_state=(0,0), goal_state=(-1,-1), deterministic_transition=True, randomised_actions=False, 
+    def __init__(self, depth, starting_state=(0,0), goal_state=(-1,-1), deterministic_transition=True, action_map=None, randomised_actions=False, 
                  randomised_action_seed=None, penalty=None, sto_trans_prob=None):
-        super().__init__(depth=depth, starting_state=starting_state, goal_state=goal_state, deterministic_transition=deterministic_transition, 
+        super().__init__(depth=depth, starting_state=starting_state, goal_state=goal_state, deterministic_transition=deterministic_transition, action_map=action_map,
                          randomised_actions=randomised_actions, randomised_action_seed=randomised_action_seed, penalty=penalty, sto_trans_prob=sto_trans_prob)
         
     def initialise(self):
@@ -271,10 +278,13 @@ class DeepSeaSwirl(DeepSea):
 
         reward_mat = np.zeros(shape=(self.depth, self.depth, self.action_space.n)) #depth x depth x action_space
 
-        if self.randomised_actions:
+        if self.action_map is not None:
+            action_mat = self.action_map
+        elif self.randomised_actions:
             action_mat = np.random.binomial(1, 0.5, size=(self.depth, self.depth))
         else:
             action_mat = np.ones([self.depth, self.depth], dtype=np.int32)
+        self.action_map = action_mat
 
         trans_mat = np.zeros((self.depth, self.depth, self.action_space.n, 2), dtype='int32')
         for row in range(self.depth):
