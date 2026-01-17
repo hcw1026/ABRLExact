@@ -1,3 +1,5 @@
+import itertools
+
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.colors as colors
@@ -53,6 +55,42 @@ def add_obs(obs, unique_stat, state0, action, state1, reward, done):
         obs["done"].append(done)
         added_flag = True
         return obs, unique_stat, added_flag
+    
+    
+def get_all_deterministic_paths(env):
+    num_actions = len(env.get_all_states()) - len(env.get_all_terminal_states())
+    all_action_combinations = list(itertools.product([0, 1], repeat=num_actions))
+    state_id = {state: num for num, state in enumerate(env.get_all_states())}
+    path_set = set()
+    for comb in all_action_combinations:
+        path = []
+        curr_state = (0, 0)
+        done = False
+        history = [curr_state]
+        while done is False:
+            action = comb[state_id[curr_state]]
+            next_state, _, done = env.step(action, is_simulation=True, simulation_state=curr_state)
+            path.append((curr_state, action))
+            if next_state in history:
+                break
+            history.append(next_state)
+            curr_state = next_state
+        path_set.add((tuple(path), tuple(history)))
+    all_paths_histories = list(path_set)
+    all_paths = [list(ph[0]) for ph in all_paths_histories]
+    all_histories = [list(ph[1]) for ph in all_paths_histories]
+    return all_paths, all_histories
+
+
+def get_all_stochastic_paths(env):
+    all_states = []
+    for state in env.get_all_states():
+        if state not in env.get_all_terminal_states():
+            all_states.append(state)
+
+    all_paths_choices = [[(s, a) for a in env.get_possible_actions(state=s, gym_space=False)] for s in all_states]
+    all_paths = list(itertools.product(*all_paths_choices))
+    return all_paths
 
 
 def binary_entropy(p):

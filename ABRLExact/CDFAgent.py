@@ -1,13 +1,13 @@
 import time
 
 from copy import deepcopy
-import itertools
 from tqdm.auto import tqdm
 
 import numpy as np
 from scipy import stats
 
-from ABRLExact.utils import sample_path_with_prob, add_obs
+from ABRLExact.utils import sample_path_with_prob, add_obs, get_all_deterministic_paths, get_all_stochastic_paths
+
 
 
 def sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, batch_size=1024, cache=None):
@@ -425,44 +425,15 @@ def cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, acti
         else:
             pEstarr = pEstarr_numer
         return pEstarr
-        
-
 
 
 def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, output_obs=False, batch_size=1024, save_path=None, disable_tqdm=False, tqdm_position=None):
 
     # get all paths
     if env.deterministic_transition is True:
-
-        num_actions = len(env.get_all_states()) - len(env.get_all_terminal_states())
-        all_action_combinations = list(itertools.product([0,1], repeat=num_actions))
-        state_id = {state: num for num, state in enumerate(env.get_all_states())}
-        path_set = set()
-        for comb in all_action_combinations:
-            path = []
-            curr_state = (0, 0)
-            done = False
-            history = [curr_state]
-            while done is False:
-                action = comb[state_id[curr_state]]
-                next_state, _, done = env.step(action, is_simulation=True, simulation_state=curr_state)
-                path.append((curr_state, action))
-                if next_state in history:
-                    break
-                history.append(next_state)
-                curr_state = next_state
-            path_set.add(tuple(path))
-        all_paths = list(path_set)
-        all_paths = [list(path) for path in all_paths]
+        all_paths, _ = get_all_deterministic_paths(env)
     else:
-        all_states = []
-        for state in env.get_all_states():
-            if state not in env.get_all_terminal_states():
-                all_states.append(state)
-        
-        all_paths_choices = [[(s, a) for a in env.get_possible_actions(state=s, gym_space=False)] for s in all_states]
-        all_paths = list(itertools.product(*all_paths_choices))
-
+        all_paths = get_all_stochastic_paths(env)
 
     # store history
     unique_stat = set()

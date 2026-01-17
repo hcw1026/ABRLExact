@@ -44,7 +44,7 @@ class DeepSea:
 
         if self.action_map is not None:
             action_mat = self.action_map
-        if self.randomised_actions: # 1 means right=0; 0 means right=1
+        elif self.randomised_actions: # 1 means right=0; 0 means right=1
             action_mat = np.random.binomial(1, 0.5, size=(self.depth, self.depth))
         else:
             action_mat = np.ones([self.depth, self.depth], dtype=np.int32)
