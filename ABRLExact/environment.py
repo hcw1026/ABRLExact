@@ -258,7 +258,7 @@ class DeepSeaPyramid(DeepSea):
                 reward_mat[row, q, :] = 1 / self.depth
             else:
                 reward_mat[row, q, 1 - action_mat[row, q]] = 1 / self.depth # right
-                reward_mat[row, q+1, action_mat[row, q]] = 1 / self.depth # left
+                reward_mat[row, q+1, action_mat[row, q+1]] = 1 / self.depth # left
                 
         return trans_mat, reward_mat, action_mat
 
