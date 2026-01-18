@@ -450,7 +450,7 @@ def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False,
     obs_cache = {}
     for s in env.get_all_states(): # compute initial marginal prob of state optimality
         if s not in env.get_all_terminal_states():
-            res = cdf_solution(obs, env, epsilon, sigma, state_q=s, cache=obs_cache)
+            res = cdf_solution(obs, env, epsilon, sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
             probs_vec.append(res[0][0])
     all_probs.append(probs_vec)
 
@@ -499,7 +499,7 @@ def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False,
             mprobs_vec = []
             for s in env.get_all_states():
                 if s not in env.get_all_terminal_states():
-                    res = cdf_solution(obs, env, epsilon, sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, cache=obs_cache)
+                    res = cdf_solution(obs, env, epsilon, sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
                     mprobs_vec.append(res[0][0])
         all_probs.append(mprobs_vec)
 
