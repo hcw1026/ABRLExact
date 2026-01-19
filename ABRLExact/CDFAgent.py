@@ -10,20 +10,52 @@ from ABRLExact.utils import sample_path_with_prob, add_obs, get_all_deterministi
 
 
 
+# def sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, batch_size=1024, cache=None):
+#     path_probs = []
+#     internal_cache = cache if cache is not None else {}
+#     for path in all_paths:
+#         state_q_list, action_q_list = zip(*path)
+#         prob = cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=state_q_list, action_q_list=action_q_list,
+#                              normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=internal_cache)
+#         path_probs.append(prob)
+
+#     path_probs = np.array(path_probs)
+#     path_probs_sum = np.sum(path_probs)
+#     path_probs = path_probs / path_probs_sum
+
+#     return sample_path_with_prob(all_paths, path_probs)
+
 def sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, batch_size=1024, cache=None):
+    return _sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=cache, bootstrap=None)
+
+
+def sample_path_td(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, bootstrap=None, num_bs_mc_samples=10000):
+    return _sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, 
+                        batch_size=None, cache=None, bootstrap=bootstrap, num_bs_mc_samples=num_bs_mc_samples)
+
+
+def _sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, batch_size=1024, cache=None, bootstrap=None, num_bs_mc_samples=10000):
     path_probs = []
     internal_cache = cache if cache is not None else {}
     for path in all_paths:
         state_q_list, action_q_list = zip(*path)
-        prob = cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=state_q_list, action_q_list=action_q_list,
-                             normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=internal_cache)
+        if bootstrap is not None:
+            prob, bootstrap = cdf_td_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, state_q=None, state_q_list=state_q_list,  # pylint: disable=unbalanced-tuple-unpacking
+                                              action_q_list=action_q_list, num_bs_mc_samples=num_bs_mc_samples, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power)
+        else:
+            prob = cdf_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, state_q=None, state_q_list=state_q_list, action_q_list=action_q_list,
+                                normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=internal_cache)
         path_probs.append(prob)
 
     path_probs = np.array(path_probs)
     path_probs_sum = np.sum(path_probs)
     path_probs = path_probs / path_probs_sum
 
-    return sample_path_with_prob(all_paths, path_probs)
+    if bootstrap is not None:
+        return sample_path_with_prob(all_paths, path_probs), bootstrap
+    else:
+        return sample_path_with_prob(all_paths, path_probs)
+
 
 # https://github.com/scipy/scipy/blob/v1.16.1/scipy/stats/_qmc.py#L2312-L2483
 def generate_base_sobol_normal(dim, power):
@@ -81,6 +113,25 @@ def qmc_configure_maxdim(ell_list, state_q, state_q_list, action_q_list, unique_
 
         dim = max(dim, dim_tmp)
     return dim
+
+
+def qmc_configure_maxdim_td(state_q, state_q_list, action_q_list, permissible_actions_dict, mode):
+
+    dim = 0
+    if mode == 0:
+        for action_q in action_q_list:
+            for action in permissible_actions_dict[str(state_q)]:
+                if not (action == action_q):
+                    dim += 1
+    elif mode == 1:
+        for state_q_idx, state_q in enumerate(state_q_list): # compute probabilities for all state-action pairs in state_q_list and action_q_list
+            action_q = action_q_list[state_q_idx]
+            for action in permissible_actions_dict[str(state_q)]:
+                if not (action == action_q):
+                    dim += 1
+                        
+    return dim
+
     
 def qmc_prep_helper(use_qmc, ell_list, state_q, state_q_list, action_q_list, unique_state1_nongoal, permissible_actions_dict, mode, power):
     if use_qmc:
@@ -90,6 +141,21 @@ def qmc_prep_helper(use_qmc, ell_list, state_q, state_q_list, action_q_list, uni
                                    state_q_list=state_q_list, 
                                    action_q_list=action_q_list, 
                                    unique_state1_nongoal=unique_state1_nongoal, 
+                                   permissible_actions_dict=permissible_actions_dict, 
+                                   mode=mode)
+        qmc_base_cache = generate_base_sobol_normal(dim=dim, power=power)
+    else:
+        qmc_base_cache = None
+
+    return qmc_base_cache
+
+
+def qmc_prep_helper_td(use_qmc, state_q, state_q_list, action_q_list, permissible_actions_dict, mode, power):
+    if use_qmc:
+
+        dim = qmc_configure_maxdim_td(state_q=state_q, 
+                                   state_q_list=state_q_list, 
+                                   action_q_list=action_q_list, 
                                    permissible_actions_dict=permissible_actions_dict, 
                                    mode=mode)
         qmc_base_cache = generate_base_sobol_normal(dim=dim, power=power)
@@ -427,7 +493,185 @@ def cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, acti
         return pEstarr
 
 
+
+def expected_q_max_mc(mean, cov, env, obs, n_samples=100000):
+
+    samples = stats.multivariate_normal.rvs(mean=mean, cov=cov, size=n_samples)
+    goal_states = env.get_all_terminal_states()
+
+    next_states_set = set()
+    for i, state1 in enumerate(obs["state1"]):
+        if isinstance(state1, dict):
+            for s1, p in state1.items():
+                if s1 not in goal_states:
+                    next_states_set.add(s1)
+        else:
+            if state1 not in goal_states:
+                next_states_set.add(state1)
+
+    max_dict = {}
+    for s1 in next_states_set:
+        actions = np.array(env.get_possible_actions(state=s1, gym_space=False))
+        indices = np.array(env.nu_vectorised(state=[s1], action=actions)) - 1
+        max_dict[s1] = np.mean(np.max(samples[:, indices], axis=1))
+        
+    expected_max = np.zeros(len(obs["state0"]))
+
+    for i, state1 in enumerate(obs["state1"]):
+        transitions = state1 if isinstance(state1, dict) else {state1: 1.}
+        for s1, p in transitions.items():
+            if s1 not in goal_states:
+                expected_max[i] += p * max_dict[s1]
+
+    return expected_max
+
+
+def cdf_td_solution(obs, env, epsilon, sigma, bootstrap, state_q=None, state_q_list=None, action_q_list=None, abseps=1e-5, num_bs_mc_samples=10000, use_qmc=False, qmc_sobol_power=10, profile=False):
+    if profile:
+        tt = time.time() ###
+    
+    if state_q is not None and action_q_list is None:
+        mode = 0
+    else:
+        assert state_q is None and state_q_list is not None and action_q_list is not None
+        mode = 1
+
+    n = len(obs["state0"])
+    
+    states = env.get_all_states()
+    goal_states = env.get_all_terminal_states()
+
+    # Get permissible action dictionary and parameter length
+    theta_len = 0
+    permissible_actions_dict = dict()
+    for state in states:
+        actions = env.get_possible_actions(state, gym_space=False)
+        permissible_actions_dict[str(state)] = actions
+        if state not in goal_states:
+            theta_len += len(actions)
+
+    if mode == 0:
+        action_q_list = permissible_actions_dict[str(state_q)]
+
+    qmc_base_cache = qmc_prep_helper_td(use_qmc=use_qmc, 
+                                        state_q=state_q, 
+                                        state_q_list=state_q_list, 
+                                        action_q_list=action_q_list, 
+                                        permissible_actions_dict=permissible_actions_dict, 
+                                        mode=mode,
+                                        power=qmc_sobol_power)
+    
+    if profile:
+        print(f"Zone A {time.time() - tt}") ###
+        tt = time.time() ###
+
+    B = np.zeros([n, theta_len])
+    if n > 0:
+        B[np.arange(n), np.array(env.nu_vectorised(state=obs["state0"], action=obs["action"])) - 1] += 1
+
+    if profile:
+        print(f"Zone B {time.time() - tt}") ###
+        tt = time.time() ###
+
+    if len(obs["rewards"]) > 0:
+
+        b_mean, b_cov = bootstrap
+        expected_q = expected_q_max_mc(mean=b_mean, cov=b_cov, env=env, obs=obs, n_samples=num_bs_mc_samples)
+        
+        Gamma_inv = (sigma**2) * (B @ B.transpose()) + (epsilon**2) * np.eye(n)
+        Gamma = np.linalg.inv(Gamma_inv)
+
+        #Get p(theta|r)
+        pos_cov_ = B.transpose() @ Gamma
+        pos_mean = (sigma**2) * pos_cov_  @ (obs["rewards"] + expected_q) # posterior mean of p(theta|r1:n)
+        pos_cov = (sigma**2) * np.eye(theta_len) - (sigma**4) * (pos_cov_ @ B) # posterior covariance of p(theta|r1:n)
+        
+    else:
+        pos_mean = np.zeros(theta_len)
+        pos_cov = sigma**2 * np.eye(theta_len)
+
+    if profile:
+        print(f"Zone C {time.time() - tt}") ###
+        tt = time.time() ###
+
+
+    if mode == 0:
+        D_star_list = []
+        for action_idx, action_q in enumerate(action_q_list): # compute probabilities for all actions
+            D_star = []
+            for action in permissible_actions_dict[str(state_q)]:
+                if not (action == action_q):
+                    D_star_tmp = np.zeros(theta_len)
+                    D_star_tmp[env.nu(state=state_q, action=action)-1] = 1
+                    D_star_tmp[env.nu(state=state_q, action=action_q)-1] = -1
+                    D_star.append(D_star_tmp)
+            
+            D_star = np.array(D_star)
+            D_star_list.append(D_star)
+
+        if profile:
+            print(f"Zone D {time.time() - tt}") ###
+            tt = time.time() ###
+
+        pEstarr_array = np.zeros(len(action_q_list))
+        for action_idx in range(len(action_q_list)):
+            D_star = D_star_list[action_idx]
+
+            if (not D_star.shape == ()) and (len(D_star) > 0): # if it is not np.array(None)
+                pEstarr_mean = D_star @ pos_mean # transformed posterior mean for cdf for E^*
+                pEstarr_cov = D_star @ pos_cov @ D_star.T # transformed posterior covariance for cdf for E^*
+                pEstarr_array[action_idx] = mvn_cdf(lower=np.zeros(len(D_star)), mean=pEstarr_mean, cov=pEstarr_cov, abseps=abseps, 
+                                                        use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, qmc_base_cache=qmc_base_cache)
+            elif D_star.shape == (0,): # no constraint, it is np.array([]), so return the probability of the sample space, which is 1
+                pEstarr_array[action_idx] = 1.
+            else: #if it is np.array(None), prob is 0
+                pEstarr_array[action_idx] = 0.
+
+    elif mode == 1:
+        D_star = []
+        for state_q_idx, state_q in enumerate(state_q_list): # compute probabilities for all state-action pairs in state_q_list and action_q_list
+            action_q = action_q_list[state_q_idx]
+            for action in permissible_actions_dict[str(state_q)]:
+                if not (action == action_q):
+                    D_star_tmp = np.zeros(theta_len)
+                    D_star_tmp[env.nu(state=state_q, action=action)-1] = 1
+                    D_star_tmp[env.nu(state=state_q, action=action_q)-1] = -1
+                    D_star.append(D_star_tmp)
+
+        D_star = np.array(D_star)
+
+        if profile:
+            print(f"Zone D {time.time() - tt}") ###
+            tt = time.time() ###
+
+        if (not D_star.shape == ()) and (len(D_star) > 0): #if it is not np.array(None)
+            pEstarr_mean = D_star @ pos_mean
+            pEstarr_cov = D_star @ pos_cov @ D_star.T
+            pEstarr = mvn_cdf(lower=np.zeros(len(D_star)), mean=pEstarr_mean, cov=pEstarr_cov, abseps=abseps, 
+                                    use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, qmc_base_cache=qmc_base_cache)
+        elif D_star.shape == (0,): # no constraint
+            pEstarr = 1.
+        else: #if it is np.array(None), prob is 0
+            pEstarr = 0.
+
+    if profile:
+        print(f"Zone E {time.time() - tt}") ###
+
+    if mode == 0:
+        return pEstarr_array, action_q_list, (pos_mean, pos_cov)
+    else:
+        return pEstarr, (pos_mean, pos_cov)
+    
+    
 def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, output_obs=False, batch_size=1024, save_path=None, disable_tqdm=False, tqdm_position=None):
+    return _run_cdf_deepsea(env=env, epsilon=epsilon, sigma=sigma, num_episodes=num_episodes, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, output_obs=output_obs, batch_size=batch_size, save_path=save_path, use_bootstrap=False, disable_tqdm=disable_tqdm, tqdm_position=tqdm_position)
+
+
+def run_cdf_deepsea_td(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, output_obs=False, num_bs_mc_samples=10000, save_path=None, disable_tqdm=False, tqdm_position=None):
+    return _run_cdf_deepsea(env=env, epsilon=epsilon, sigma=sigma, num_episodes=num_episodes, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, output_obs=output_obs, use_bootstrap=True, num_bs_mc_samples=num_bs_mc_samples, save_path=save_path, disable_tqdm=disable_tqdm, tqdm_position=tqdm_position)
+
+
+def _run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, output_obs=False, batch_size=1024, use_bootstrap=False, num_bs_mc_samples=10000, save_path=None, disable_tqdm=False, tqdm_position=None):
 
     # get all paths
     if env.deterministic_transition is True:
@@ -446,11 +690,24 @@ def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False,
         obs_history = [deepcopy(obs)]
 
     # initialise
+    if use_bootstrap:
+        theta_len = 0
+        states = env.get_all_states()
+        goal_states = env.get_all_terminal_states()
+        for state in states:
+            actions = env.get_possible_actions(state, gym_space=False)
+            if state not in goal_states:
+                theta_len += len(actions)
+        bootstrap = [np.zeros(theta_len), np.eye(theta_len) * sigma ** 2]
+
     probs_vec = [] 
     obs_cache = {}
     for s in env.get_all_states(): # compute initial marginal prob of state optimality
         if s not in env.get_all_terminal_states():
-            res = cdf_solution(obs, env, epsilon, sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
+            if use_bootstrap:
+                res = cdf_td_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, state_q=s, use_qmc=use_qmc, num_bs_mc_samples=num_bs_mc_samples, qmc_sobol_power=qmc_sobol_power)
+            else:
+                res = cdf_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
             probs_vec.append(res[0][0])
     all_probs.append(probs_vec)
 
@@ -465,8 +722,12 @@ def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False,
         reward_acc = []
 
         # rollout
-        if new_flag is True:
-            policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
+        if new_flag is True or use_bootstrap:
+            if use_bootstrap:
+                # return bootstrap as a conclusion of the posterior given the current observations, to be used for the next iteration after observations are updated
+                (policy, path_probs), bootstrap = sample_path_td(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, num_bs_mc_samples=num_bs_mc_samples)
+            else:
+                policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
         else:
             policy, path_probs = sample_path_with_prob(all_paths, path_probs)
         all_optimal_path_probs.append(path_probs)
@@ -494,18 +755,25 @@ def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False,
             obs_history.append(deepcopy(obs))
 
         # compute marginal prob of state optimality
-        if new_flag is True:
+        if new_flag is True or use_bootstrap:
             obs_cache = {}
             mprobs_vec = []
             for s in env.get_all_states():
                 if s not in env.get_all_terminal_states():
-                    res = cdf_solution(obs, env, epsilon, sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
+                    if use_bootstrap:
+                        res = cdf_td_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, state_q=s, use_qmc=use_qmc, num_bs_mc_samples=num_bs_mc_samples, qmc_sobol_power=qmc_sobol_power)
+                    else:
+                        res = cdf_solution(obs, env, epsilon, sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
                     mprobs_vec.append(res[0][0])
         all_probs.append(mprobs_vec)
 
     # final optimal path prob
-    if new_flag is True:
-        policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
+    if new_flag is True or use_bootstrap:
+        if use_bootstrap:
+                (policy, path_probs), bootstrap = sample_path_td(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, 
+                                                                 all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, num_bs_mc_samples=num_bs_mc_samples)
+        else:
+            policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
     else:
         policy, path_probs = sample_path_with_prob(all_paths, path_probs)
     all_optimal_path_probs.append(path_probs)
