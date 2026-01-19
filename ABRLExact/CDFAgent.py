@@ -29,7 +29,7 @@ def sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_po
     return _sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=cache, bootstrap=None)
 
 
-def sample_path_td(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, bootstrap=None, num_bs_mc_samples=10000):
+def sample_path_bs(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, bootstrap=None, num_bs_mc_samples=10000):
     return _sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, 
                         batch_size=None, cache=None, bootstrap=bootstrap, num_bs_mc_samples=num_bs_mc_samples)
 
@@ -40,7 +40,7 @@ def _sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_p
     for path in all_paths:
         state_q_list, action_q_list = zip(*path)
         if bootstrap is not None:
-            prob, bootstrap = cdf_td_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, state_q=None, state_q_list=state_q_list,  # pylint: disable=unbalanced-tuple-unpacking
+            prob, bootstrap = cdf_bs_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, state_q=None, state_q_list=state_q_list,  # pylint: disable=unbalanced-tuple-unpacking
                                               action_q_list=action_q_list, num_bs_mc_samples=num_bs_mc_samples, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power)
         else:
             prob = cdf_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, state_q=None, state_q_list=state_q_list, action_q_list=action_q_list,
@@ -115,7 +115,7 @@ def qmc_configure_maxdim(ell_list, state_q, state_q_list, action_q_list, unique_
     return dim
 
 
-def qmc_configure_maxdim_td(state_q, state_q_list, action_q_list, permissible_actions_dict, mode):
+def qmc_configure_maxdim_bs(state_q, state_q_list, action_q_list, permissible_actions_dict, mode):
 
     dim = 0
     if mode == 0:
@@ -150,10 +150,10 @@ def qmc_prep_helper(use_qmc, ell_list, state_q, state_q_list, action_q_list, uni
     return qmc_base_cache
 
 
-def qmc_prep_helper_td(use_qmc, state_q, state_q_list, action_q_list, permissible_actions_dict, mode, power):
+def qmc_prep_helper_bs(use_qmc, state_q, state_q_list, action_q_list, permissible_actions_dict, mode, power):
     if use_qmc:
 
-        dim = qmc_configure_maxdim_td(state_q=state_q, 
+        dim = qmc_configure_maxdim_bs(state_q=state_q, 
                                    state_q_list=state_q_list, 
                                    action_q_list=action_q_list, 
                                    permissible_actions_dict=permissible_actions_dict, 
@@ -526,7 +526,7 @@ def expected_q_max_mc(mean, cov, env, obs, n_samples=100000):
     return expected_max
 
 
-def cdf_td_solution(obs, env, epsilon, sigma, bootstrap, state_q=None, state_q_list=None, action_q_list=None, abseps=1e-5, num_bs_mc_samples=10000, use_qmc=False, qmc_sobol_power=10, profile=False):
+def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, state_q=None, state_q_list=None, action_q_list=None, abseps=1e-5, num_bs_mc_samples=10000, use_qmc=False, qmc_sobol_power=10, profile=False):
     if profile:
         tt = time.time() ###
     
@@ -553,7 +553,7 @@ def cdf_td_solution(obs, env, epsilon, sigma, bootstrap, state_q=None, state_q_l
     if mode == 0:
         action_q_list = permissible_actions_dict[str(state_q)]
 
-    qmc_base_cache = qmc_prep_helper_td(use_qmc=use_qmc, 
+    qmc_base_cache = qmc_prep_helper_bs(use_qmc=use_qmc, 
                                         state_q=state_q, 
                                         state_q_list=state_q_list, 
                                         action_q_list=action_q_list, 
@@ -667,7 +667,7 @@ def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False,
     return _run_cdf_deepsea(env=env, epsilon=epsilon, sigma=sigma, num_episodes=num_episodes, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, output_obs=output_obs, batch_size=batch_size, save_path=save_path, use_bootstrap=False, disable_tqdm=disable_tqdm, tqdm_position=tqdm_position)
 
 
-def run_cdf_deepsea_td(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, output_obs=False, num_bs_mc_samples=10000, save_path=None, disable_tqdm=False, tqdm_position=None):
+def run_cdf_deepsea_bs(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, output_obs=False, num_bs_mc_samples=10000, save_path=None, disable_tqdm=False, tqdm_position=None):
     return _run_cdf_deepsea(env=env, epsilon=epsilon, sigma=sigma, num_episodes=num_episodes, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, output_obs=output_obs, use_bootstrap=True, num_bs_mc_samples=num_bs_mc_samples, save_path=save_path, disable_tqdm=disable_tqdm, tqdm_position=tqdm_position)
 
 
@@ -705,7 +705,7 @@ def _run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False
     for s in env.get_all_states(): # compute initial marginal prob of state optimality
         if s not in env.get_all_terminal_states():
             if use_bootstrap:
-                res = cdf_td_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, state_q=s, use_qmc=use_qmc, num_bs_mc_samples=num_bs_mc_samples, qmc_sobol_power=qmc_sobol_power)
+                res = cdf_bs_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, state_q=s, use_qmc=use_qmc, num_bs_mc_samples=num_bs_mc_samples, qmc_sobol_power=qmc_sobol_power)
             else:
                 res = cdf_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
             probs_vec.append(res[0][0])
@@ -725,7 +725,7 @@ def _run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False
         if new_flag is True or use_bootstrap:
             if use_bootstrap:
                 # return bootstrap as a conclusion of the posterior given the current observations, to be used for the next iteration after observations are updated
-                (policy, path_probs), bootstrap = sample_path_td(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, num_bs_mc_samples=num_bs_mc_samples)
+                (policy, path_probs), bootstrap = sample_path_bs(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, num_bs_mc_samples=num_bs_mc_samples)
             else:
                 policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
         else:
@@ -761,7 +761,7 @@ def _run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False
             for s in env.get_all_states():
                 if s not in env.get_all_terminal_states():
                     if use_bootstrap:
-                        res = cdf_td_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, state_q=s, use_qmc=use_qmc, num_bs_mc_samples=num_bs_mc_samples, qmc_sobol_power=qmc_sobol_power)
+                        res = cdf_bs_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, state_q=s, use_qmc=use_qmc, num_bs_mc_samples=num_bs_mc_samples, qmc_sobol_power=qmc_sobol_power)
                     else:
                         res = cdf_solution(obs, env, epsilon, sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
                     mprobs_vec.append(res[0][0])
@@ -770,7 +770,7 @@ def _run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False
     # final optimal path prob
     if new_flag is True or use_bootstrap:
         if use_bootstrap:
-                (policy, path_probs), bootstrap = sample_path_td(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, 
+                (policy, path_probs), bootstrap = sample_path_bs(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, 
                                                                  all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, num_bs_mc_samples=num_bs_mc_samples)
         else:
             policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
