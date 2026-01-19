@@ -9,7 +9,7 @@ import multiprocessing
 from omegaconf import OmegaConf
 
 from ABRLExact.environment import DeepSea, DeepSeaPyramid, DeepSeaSwirl
-from ABRLExact.CDFAgent import run_cdf_deepsea, run_cdf_deepsea_td
+from ABRLExact.CDFAgent import run_cdf_deepsea, run_cdf_deepsea_bs
 from ABRLExact.HMCAgent import run_hmc_deepsea
 
 worker_id = 0
@@ -78,7 +78,7 @@ def run_parallel_cdf_deepsea(num_experiments, env_generator, epsilon=0.02, sigma
                                    base_kwargs=base_kwargs, save_dir=save_dir, n_jobs=n_jobs, start_idx=start_idx)
 
 
-def run_parallel_cdf_deepsea_td(num_experiments, env_generator, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, # pylint: disable=redefined-outer-name
+def run_parallel_cdf_deepsea_bs(num_experiments, env_generator, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, # pylint: disable=redefined-outer-name
                                output_obs=False, num_bs_mc_samples=10000, save_dir=None, n_jobs=None, start_idx=0): # pylint: disable=redefined-outer-name
     base_kwargs = {
         "epsilon": epsilon,
@@ -89,7 +89,7 @@ def run_parallel_cdf_deepsea_td(num_experiments, env_generator, epsilon=0.02, si
         "output_obs": output_obs,
         "num_bs_mc_samples": num_bs_mc_samples
     }
-    return run_parallel_experiment(num_experiments=num_experiments, env_generator=env_generator, experiment_runner=run_cdf_deepsea_td, 
+    return run_parallel_experiment(num_experiments=num_experiments, env_generator=env_generator, experiment_runner=run_cdf_deepsea_bs, 
                                    base_kwargs=base_kwargs, save_dir=save_dir, n_jobs=n_jobs, start_idx=start_idx)
 
 
@@ -242,13 +242,13 @@ if __name__ == "__main__":
             "batch_size": args.batch_size
         })
         runner = run_parallel_cdf_deepsea
-    elif config['method'].lower() == 'cdf_td':
+    elif config['method'].lower() == 'cdf_bs':
         runner_params.update({
             "use_qmc": config["use_qmc"],
             "qmc_sobol_power": config["qmc_sobol_power"],
             "num_bs_mc_samples": config.get("num_bs_mc_samples", 10000)
         })
-        runner = run_parallel_cdf_deepsea_td
+        runner = run_parallel_cdf_deepsea_bs
     elif config['method'].lower() == 'hmc':
         input_obs_data = None
         if config.get("input_obs") is not None:
