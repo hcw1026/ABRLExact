@@ -9,14 +9,14 @@ randomised_action_seed: null
 
 # Experiment settings
 method: hmc
-epsilon: 0.01
+epsilon: 0.1
 sigma: 10
 num_episodes: 100
 output_obs: true
 
 # HMC settings
 num_samples: 1000
-step_size: 0.1
+step_size: 0.01
 num_steps: 10
 num_warmup_runs: 10
 num_warmup_samples_per_run: 100
