@@ -231,6 +231,8 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
     parameter_dim = (len(env.get_all_states()) - len(env.get_all_terminal_states())) * 2
     samples_history = []
     acc_prob_history = []
+    if output_obs is True:
+        obs_history = [deepcopy(obs)]
     
     if input_obs is not None: # for experimental use where obs is guided by an external algorithm (e.g. cdf)
         num_episodes = len(input_obs)
@@ -246,7 +248,7 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
             obs = input_obs[i]
             
         if output_obs is True: 
-            obs_history = [deepcopy(obs)]
+            obs_history.append(deepcopy(obs))
     
         if i > 0 or input_obs is not None:
             if i == 0:
