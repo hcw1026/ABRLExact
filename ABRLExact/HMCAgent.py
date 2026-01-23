@@ -254,7 +254,8 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
             if i == 0:
                 fitted_diag_std = 1.
             else:
-                fitted_diag_std = torch.tensor(np.std(all_q_samples, axis=0, ddof=1) + 1e-3) # to ensure it is non-zero
+                k = min(1, len(all_q_samples) // 2)
+                fitted_diag_std = torch.tensor(np.std(all_q_samples[k:], axis=0, ddof=1) + 1e-3) # to ensure it is non-zero
             q_sample, step_size, all_q_samples, acc_prob = sample_q_mcmc(obs=obs, env=env, epsilon=epsilon, sigma=sigma, num_samples=num_samples, 
                                                                step_size=step_size, num_steps=num_steps, num_warmup_runs=num_warmup_runs,
                                                                num_warmup_samples_per_run=num_warmup_samples_per_run, fitted_diag_std=fitted_diag_std, 
