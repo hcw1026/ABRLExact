@@ -8,11 +8,11 @@ randomised_actions: true
 randomised_action_seed: null
 
 # Experiment settings
-method: cdf_bs0
+method: cdf_bs2
 epsilon: 0.01
 sigma: 10
 num_episodes: 100
 use_qmc: true
 qmc_sobol_power: 15
 output_obs: true
-num_bs_samples: 100000
+num_bs_samples: 100

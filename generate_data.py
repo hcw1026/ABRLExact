@@ -79,7 +79,7 @@ def run_parallel_cdf_deepsea(num_experiments, env_generator, epsilon=0.02, sigma
 
 
 def run_parallel_cdf_deepsea_bs(num_experiments, env_generator, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, # pylint: disable=redefined-outer-name
-                               output_obs=False, num_bs_mc_samples=10000, bootstrap_mode=0, save_dir=None, n_jobs=None, start_idx=0): # pylint: disable=redefined-outer-name
+                               output_obs=False, num_bs_samples=10000, bootstrap_mode=0, save_dir=None, n_jobs=None, start_idx=0): # pylint: disable=redefined-outer-name
     base_kwargs = {
         "epsilon": epsilon,
         "sigma": sigma,
@@ -87,7 +87,7 @@ def run_parallel_cdf_deepsea_bs(num_experiments, env_generator, epsilon=0.02, si
         "use_qmc": use_qmc,
         "qmc_sobol_power": qmc_sobol_power,
         "output_obs": output_obs,
-        "num_bs_mc_samples": num_bs_mc_samples,
+        "num_bs_samples": num_bs_samples,
         "bootstrap_mode": bootstrap_mode
     }
     return run_parallel_experiment(num_experiments=num_experiments, env_generator=env_generator, experiment_runner=run_cdf_deepsea_bs, 
@@ -157,13 +157,21 @@ def find_existing_run(base_dir, config): # pylint: disable=redefined-outer-name
     if not os.path.exists(base_dir):
         return None
     
+    target_config = config.copy()
+    target_config.pop("num_experiments", None)
+    is_cdf_bs1 = target_config.get("method", "").lower() == "cdf_bs1"
+    if is_cdf_bs1:
+        target_config.pop("num_bs_samples", None)
+
     for entry in os.scandir(base_dir):
         if entry.is_dir():
             config_path = os.path.join(entry.path, "config.yaml")
             if os.path.exists(config_path):
                 existing_config = OmegaConf.to_container(OmegaConf.load(config_path), resolve=True)
                 existing_config.pop("num_experiments", None)
-                if existing_config == config:
+                if is_cdf_bs1:
+                    existing_config.pop("num_bs_samples", None)
+                if existing_config == target_config:
                     return entry.path
     return None
 
@@ -244,11 +252,19 @@ if __name__ == "__main__":
         })
         runner = run_parallel_cdf_deepsea
     elif config['method'].lower().startswith('cdf_bs'):
+        method_name = config['method'].lower()
+        if method_name == 'cdf_bs2':
+            bs_mode = 2
+        elif method_name == 'cdf_bs1':
+            bs_mode = 1
+        else:
+            bs_mode = 0
+
         runner_params.update({
             "use_qmc": config["use_qmc"],
             "qmc_sobol_power": config["qmc_sobol_power"],
-            "num_bs_mc_samples": config.get("num_bs_mc_samples", 10000),
-            "bootstrap_mode": 1 if config['method'].lower() == 'cdf_bs1' else 0
+            "num_bs_samples": config.get("num_bs_samples", 10000),
+            "bootstrap_mode": bs_mode
         })
         runner = run_parallel_cdf_deepsea_bs
     elif config['method'].lower() == 'hmc':

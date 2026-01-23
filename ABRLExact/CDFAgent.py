@@ -29,19 +29,21 @@ def sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_po
     return _sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=cache, bootstrap=None)
 
 
-def sample_path_bs(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, bootstrap=None, bootstrap_mode=0, num_bs_mc_samples=10000):
+def sample_path_bs(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, bootstrap=None, bootstrap_mode=0, num_bs_samples=10000):
     return _sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, 
-                        batch_size=None, cache=None, bootstrap=bootstrap, bootstrap_mode=bootstrap_mode, num_bs_mc_samples=num_bs_mc_samples)
+                        batch_size=None, cache=None, bootstrap=bootstrap, bootstrap_mode=bootstrap_mode, num_bs_samples=num_bs_samples)
 
 
-def _sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, batch_size=1024, cache=None, bootstrap=None, bootstrap_mode=0, num_bs_mc_samples=10000):
+def _sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, batch_size=1024, cache=None, bootstrap=None, bootstrap_mode=0, num_bs_samples=10000):
     path_probs = []
     internal_cache = cache if cache is not None else {}
+    bootstrap_out = None
+
     for path in all_paths:
         state_q_list, action_q_list = zip(*path)
         if bootstrap is not None:
-            prob, bootstrap = cdf_bs_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, bootstrap_mode=bootstrap_mode, state_q=None, state_q_list=state_q_list,  # pylint: disable=unbalanced-tuple-unpacking
-                                              action_q_list=action_q_list, num_bs_mc_samples=num_bs_mc_samples, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power)
+            prob, bootstrap_out = cdf_bs_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, bootstrap_mode=bootstrap_mode, state_q=None, state_q_list=state_q_list,  # pylint: disable=unbalanced-tuple-unpacking
+                                              action_q_list=action_q_list, num_bs_samples=num_bs_samples, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power)
         else:
             prob = cdf_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, state_q=None, state_q_list=state_q_list, action_q_list=action_q_list,
                                 normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=internal_cache)
@@ -52,7 +54,7 @@ def _sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_p
     path_probs = path_probs / path_probs_sum
 
     if bootstrap is not None:
-        return sample_path_with_prob(all_paths, path_probs), bootstrap
+        return sample_path_with_prob(all_paths, path_probs), bootstrap_out
     else:
         return sample_path_with_prob(all_paths, path_probs)
 
@@ -552,7 +554,7 @@ def expected_q_max(mean, cov, env, obs, n_samples=100000, mode=0):
         return expected_q_max_bias(estimate=mean, env=env, obs=obs)
 
 
-def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state_q=None, state_q_list=None, action_q_list=None, abseps=1e-5, num_bs_mc_samples=10000, use_qmc=False, qmc_sobol_power=10, profile=False):
+def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state_q=None, state_q_list=None, action_q_list=None, abseps=1e-5, num_bs_samples=10000, use_qmc=False, qmc_sobol_power=10, profile=False):
     if profile:
         tt = time.time() ###
     
@@ -599,22 +601,30 @@ def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state
         print(f"Zone B {time.time() - tt}") ###
         tt = time.time() ###
 
-    if len(obs["rewards"]) > 0:
+    pos_samples = []
+    if bootstrap_mode == 2:
+        bootstrap_list = bootstrap
+    else:
+        bootstrap_list = [bootstrap]
 
-        b_mean, b_cov = bootstrap
-        expected_q = expected_q_max(mean=b_mean, cov=b_cov, env=env, obs=obs, n_samples=num_bs_mc_samples, mode=bootstrap_mode)
-        
+    if len(obs["rewards"]) > 0:
         Gamma_inv = (sigma**2) * (B @ B.transpose()) + (epsilon**2) * np.eye(n)
         Gamma = np.linalg.inv(Gamma_inv)
-
-        #Get p(theta|r)
         pos_cov_ = B.transpose() @ Gamma
-        pos_mean = (sigma**2) * pos_cov_  @ (obs["rewards"] + expected_q) # posterior mean of p(theta|r1:n)
-        pos_cov = (sigma**2) * np.eye(theta_len) - (sigma**4) * (pos_cov_ @ B) # posterior covariance of p(theta|r1:n)
-        
+        pos_cov = (sigma**2) * np.eye(theta_len) - (sigma**4) * (pos_cov_ @ B)
     else:
-        pos_mean = np.zeros(theta_len)
         pos_cov = sigma**2 * np.eye(theta_len)
+
+    for b_pair in bootstrap_list:
+        b_mean, b_cov = b_pair
+        if len(obs["rewards"]) > 0:
+            expected_q_mode = 0 if bootstrap_mode == 2 else bootstrap_mode
+            expected_q = expected_q_max(mean=b_mean, cov=b_cov, env=env, obs=obs, n_samples=num_bs_samples, mode=expected_q_mode)
+            pos_mean = (sigma**2) * pos_cov_  @ (obs["rewards"] + expected_q)
+            pos_samples.append((pos_mean, pos_cov))
+        else:
+            pos_mean = np.zeros(theta_len)
+            pos_samples.append((pos_mean, pos_cov))
 
     if profile:
         print(f"Zone C {time.time() - tt}") ###
@@ -639,19 +649,21 @@ def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state
             print(f"Zone D {time.time() - tt}") ###
             tt = time.time() ###
 
-        pEstarr_array = np.zeros(len(action_q_list))
-        for action_idx in range(len(action_q_list)):
-            D_star = D_star_list[action_idx]
+        pEstarr_array_sum = np.zeros(len(action_q_list))
+        for pos_mean, pos_cov in pos_samples:
+            for action_idx in range(len(action_q_list)):
+                D_star = D_star_list[action_idx]
 
-            if (not D_star.shape == ()) and (len(D_star) > 0): # if it is not np.array(None)
-                pEstarr_mean = D_star @ pos_mean # transformed posterior mean for cdf for E^*
-                pEstarr_cov = D_star @ pos_cov @ D_star.T # transformed posterior covariance for cdf for E^*
-                pEstarr_array[action_idx] = mvn_cdf(lower=np.zeros(len(D_star)), mean=pEstarr_mean, cov=pEstarr_cov, abseps=abseps, 
-                                                        use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, qmc_base_cache=qmc_base_cache)
-            elif D_star.shape == (0,): # no constraint, it is np.array([]), so return the probability of the sample space, which is 1
-                pEstarr_array[action_idx] = 1.
-            else: #if it is np.array(None), prob is 0
-                pEstarr_array[action_idx] = 0.
+                if (not D_star.shape == ()) and (len(D_star) > 0): # if it is not np.array(None)
+                    pEstarr_mean = D_star @ pos_mean # transformed posterior mean for cdf for E^*
+                    pEstarr_cov = D_star @ pos_cov @ D_star.T # transformed posterior covariance for cdf for E^*
+                    pEstarr_array_sum[action_idx] += mvn_cdf(lower=np.zeros(len(D_star)), mean=pEstarr_mean, cov=pEstarr_cov, abseps=abseps, 
+                                                            use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, qmc_base_cache=qmc_base_cache)
+                elif D_star.shape == (0,): # no constraint, it is np.array([]), so return the probability of the sample space, which is 1
+                    pEstarr_array_sum[action_idx] += 1.
+                else: #if it is np.array(None), prob is 0
+                    pEstarr_array_sum[action_idx] += 0.
+        pEstarr_array = pEstarr_array_sum / len(pos_samples)
 
     elif mode == 1:
         D_star = []
@@ -670,34 +682,42 @@ def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state
             print(f"Zone D {time.time() - tt}") ###
             tt = time.time() ###
 
-        if (not D_star.shape == ()) and (len(D_star) > 0): #if it is not np.array(None)
-            pEstarr_mean = D_star @ pos_mean
-            pEstarr_cov = D_star @ pos_cov @ D_star.T
-            pEstarr = mvn_cdf(lower=np.zeros(len(D_star)), mean=pEstarr_mean, cov=pEstarr_cov, abseps=abseps, 
-                                    use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, qmc_base_cache=qmc_base_cache)
-        elif D_star.shape == (0,): # no constraint
-            pEstarr = 1.
-        else: #if it is np.array(None), prob is 0
-            pEstarr = 0.
+        pEstarr_sum = 0.
+        for pos_mean, pos_cov in pos_samples:
+            if (not D_star.shape == ()) and (len(D_star) > 0): #if it is not np.array(None)
+                pEstarr_mean = D_star @ pos_mean
+                pEstarr_cov = D_star @ pos_cov @ D_star.T
+                pEstarr_sum += mvn_cdf(lower=np.zeros(len(D_star)), mean=pEstarr_mean, cov=pEstarr_cov, abseps=abseps, 
+                                        use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, qmc_base_cache=qmc_base_cache)
+            elif D_star.shape == (0,): # no constraint
+                pEstarr_sum += 1.
+            else: #if it is np.array(None), prob is 0
+                pEstarr_sum += 0.
+        pEstarr = pEstarr_sum / len(pos_samples)
 
     if profile:
         print(f"Zone E {time.time() - tt}") ###
 
-    if mode == 0:
-        return pEstarr_array, action_q_list, (pos_mean, pos_cov)
+    if bootstrap_mode == 2:
+        bootstrap_out = pos_samples
     else:
-        return pEstarr, (pos_mean, pos_cov)
+        bootstrap_out = pos_samples[0]
+
+    if mode == 0:
+        return pEstarr_array, action_q_list, bootstrap_out
+    else:
+        return pEstarr, bootstrap_out
     
     
 def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, output_obs=False, batch_size=1024, save_path=None, disable_tqdm=False, tqdm_position=None):
     return _run_cdf_deepsea(env=env, epsilon=epsilon, sigma=sigma, num_episodes=num_episodes, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, output_obs=output_obs, batch_size=batch_size, save_path=save_path, use_bootstrap=False, disable_tqdm=disable_tqdm, tqdm_position=tqdm_position)
 
 
-def run_cdf_deepsea_bs(env, epsilon=0.02, sigma=10, num_episodes=30, bootstrap_mode=0, use_qmc=False, qmc_sobol_power=18, output_obs=False, num_bs_mc_samples=10000, save_path=None, disable_tqdm=False, tqdm_position=None):
-    return _run_cdf_deepsea(env=env, epsilon=epsilon, sigma=sigma, num_episodes=num_episodes, bootstrap_mode=bootstrap_mode, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, output_obs=output_obs, use_bootstrap=True, num_bs_mc_samples=num_bs_mc_samples, save_path=save_path, disable_tqdm=disable_tqdm, tqdm_position=tqdm_position)
+def run_cdf_deepsea_bs(env, epsilon=0.02, sigma=10, num_episodes=30, bootstrap_mode=0, use_qmc=False, qmc_sobol_power=18, output_obs=False, num_bs_samples=10000, save_path=None, disable_tqdm=False, tqdm_position=None):
+    return _run_cdf_deepsea(env=env, epsilon=epsilon, sigma=sigma, num_episodes=num_episodes, bootstrap_mode=bootstrap_mode, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, output_obs=output_obs, use_bootstrap=True, num_bs_samples=num_bs_samples, save_path=save_path, disable_tqdm=disable_tqdm, tqdm_position=tqdm_position)
 
 
-def _run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, bootstrap_mode=0, use_qmc=False, qmc_sobol_power=18, output_obs=False, batch_size=1024, use_bootstrap=False, num_bs_mc_samples=10000, save_path=None, disable_tqdm=False, tqdm_position=None):
+def _run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, bootstrap_mode=0, use_qmc=False, qmc_sobol_power=18, output_obs=False, batch_size=1024, use_bootstrap=False, num_bs_samples=10000, save_path=None, disable_tqdm=False, tqdm_position=None):
 
     # get all paths
     if env.deterministic_transition is True:
@@ -724,14 +744,18 @@ def _run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, bootstrap_mod
             actions = env.get_possible_actions(state, gym_space=False)
             if state not in goal_states:
                 theta_len += len(actions)
-        bootstrap = [np.zeros(theta_len), np.eye(theta_len) * sigma ** 2]
+        
+        if bootstrap_mode == 2:
+            bootstrap = [[np.zeros(theta_len), np.eye(theta_len) * sigma ** 2] for _ in range(num_bs_samples)]
+        else:
+            bootstrap = [np.zeros(theta_len), np.eye(theta_len) * sigma ** 2]
 
     probs_vec = [] 
     obs_cache = {}
     for s in env.get_all_states(): # compute initial marginal prob of state optimality
         if s not in env.get_all_terminal_states():
             if use_bootstrap:
-                res = cdf_bs_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, bootstrap_mode=bootstrap_mode, state_q=s, use_qmc=use_qmc, num_bs_mc_samples=num_bs_mc_samples, qmc_sobol_power=qmc_sobol_power)
+                res = cdf_bs_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, bootstrap_mode=bootstrap_mode, state_q=s, use_qmc=use_qmc, num_bs_samples=num_bs_samples, qmc_sobol_power=qmc_sobol_power)
             else:
                 res = cdf_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
             probs_vec.append(res[0][0])
@@ -751,7 +775,7 @@ def _run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, bootstrap_mod
         if new_flag is True or use_bootstrap:
             if use_bootstrap:
                 # return bootstrap as a conclusion of the posterior given the current observations, to be used for the next iteration after observations are updated
-                (policy, path_probs), bootstrap = sample_path_bs(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, bootstrap_mode=bootstrap_mode, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, num_bs_mc_samples=num_bs_mc_samples)
+                (policy, path_probs), bootstrap = sample_path_bs(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, bootstrap_mode=bootstrap_mode, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, num_bs_samples=num_bs_samples)
             else:
                 policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
         else:
@@ -787,7 +811,7 @@ def _run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, bootstrap_mod
             for s in env.get_all_states():
                 if s not in env.get_all_terminal_states():
                     if use_bootstrap:
-                        res = cdf_bs_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, bootstrap_mode=bootstrap_mode, state_q=s, use_qmc=use_qmc, num_bs_mc_samples=num_bs_mc_samples, qmc_sobol_power=qmc_sobol_power)
+                        res = cdf_bs_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, bootstrap_mode=bootstrap_mode, state_q=s, use_qmc=use_qmc, num_bs_samples=num_bs_samples, qmc_sobol_power=qmc_sobol_power)
                     else:
                         res = cdf_solution(obs, env, epsilon, sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
                     mprobs_vec.append(res[0][0])
@@ -797,7 +821,7 @@ def _run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, bootstrap_mod
     if new_flag is True or use_bootstrap:
         if use_bootstrap:
                 (policy, path_probs), bootstrap = sample_path_bs(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, bootstrap_mode=bootstrap_mode, 
-                                                                 all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, num_bs_mc_samples=num_bs_mc_samples)
+                                                                 all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, num_bs_samples=num_bs_samples)
         else:
             policy, path_probs = sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)
     else:
