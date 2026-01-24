@@ -22,7 +22,7 @@ EPSILONS=(0.01 0.1 0.2 0.5 1.0 5.0)
 #             --base_dir "$BASE_DIR" \
 #             --n_jobs "$N_JOBS" \
 #             --epsilon "$eps" \
-#             --batch_size "$BATCH_SIZE"\
+#             --batch_size "$BATCH_SIZE" \
 #             --num_experiments "$NUM_EXPERIMENTS"
 #     done
 # done
@@ -81,7 +81,7 @@ EPSILONS=(0.01 0.1 0.2 0.5 1.0 5.0)
 # python generate_data.py "$DEEPSEAPYRAMID_CONFIG" \
 #     --base_dir "$BASE_DIR" \
 #     --n_jobs "$N_JOBS" \
-#     --batch_size "$BATCH_SIZE"\
+#     --batch_size "$BATCH_SIZE" \
 #     --num_experiments "$NUM_EXPERIMENTS"
 
 
@@ -94,7 +94,7 @@ EPSILONS=(0.01 0.1 0.2 0.5 1.0 5.0)
 # python generate_data.py "$DEEPSEASWIRL_CONFIG" \
 #     --base_dir "$BASE_DIR" \
 #     --n_jobs "$N_JOBS" \
-#     --batch_size "$BATCH_SIZE"\
+#     --batch_size "$BATCH_SIZE" \
 #     --num_experiments "$NUM_EXPERIMENTS"
 
 
@@ -107,6 +107,6 @@ EPSILONS=(0.01 0.1 0.2 0.5 1.0 5.0)
 # python generate_data.py "$DEEPSEASTO_CONFIG" \
 #     --base_dir "$BASE_DIR" \
 #     --n_jobs "$N_JOBS" \
-#     --batch_size "$BATCH_SIZE"\
+#     --batch_size "$BATCH_SIZE" \
 #     --num_experiments "$NUM_EXPERIMENTS"
 
