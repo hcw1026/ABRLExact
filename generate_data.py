@@ -46,11 +46,11 @@ def run_parallel_experiment(num_experiments, env_generator, experiment_runner, b
         idx = start_idx + i
         kwargs = base_kwargs.copy()
         if save_dir is not None:
-            kwargs["save_path"] = os.path.join(save_dir, f"run_{idx}.npy")
+            kwargs["save_path"] = os.path.join(save_dir, "run_{}.npy".format(idx))
 
         tasks.append((idx, env_generator, experiment_runner, kwargs))
 
-    print(f"Starting {num_experiments} experiments on {n_jobs} cores...")
+    print("Starting {} experiments on {} cores...".format(num_experiments, n_jobs))
 
     m = multiprocessing.Manager()
     q = m.Queue()
@@ -191,7 +191,7 @@ def configure_experiment(omega_config): # pylint: disable=redefined-outer-name
         env_class = DeepSeaSwirl
         use_penalty = True
     else:
-        raise ValueError(f"Unknown environment name: {config['name']}")
+        raise ValueError("Unknown environment name: {}".format(config['name']))
 
     env_kwargs = {k: config[k] for k in ["depth", "deterministic_transition", "randomised_actions", "randomised_action_seed", "sto_trans_prob"]}
     if use_penalty:
@@ -218,7 +218,7 @@ if __name__ == "__main__":
     base_dir = args.base_dir
 
     if not os.path.exists(args.config):
-        print(f"Configuration file '{args.config}' not found.")
+        print("Configuration file '{}' not found.".format(args.config))
         exit(1)
 
     omega_config = OmegaConf.load(args.config)
@@ -276,9 +276,9 @@ if __name__ == "__main__":
                 if "obs_history" in data:
                     input_obs_data = data["obs_history"]
                 else:
-                    raise ValueError(f"'obs_history' not found in {input_obs_path}")
+                    raise ValueError("'obs_history' not found in {}".format(input_obs_path))
             except Exception as e: # pylint: disable=broad-exception-caught
-                print(f"Error loading input_obs file: {e}")
+                print("Error loading input_obs file: {}".format(e))
                 exit(1)
 
         runner_params.update({
@@ -294,10 +294,10 @@ if __name__ == "__main__":
         })
         runner = run_parallel_hmc_deepsea
     else:
-        raise ValueError(f"Unknown method: {config['method']}")
+        raise ValueError("Unknown method: {}".format(config['method']))
 
     if existing_run:
-        print(f"Found existing run with same configuration at: {existing_run}")
+        print("Found existing run with same configuration at: {}".format(existing_run))
 
         existing_files = [f for f in os.listdir(existing_run) if f.startswith("run_") and f.endswith(".npy")]
         
@@ -306,22 +306,22 @@ if __name__ == "__main__":
             try:
                 existing_indices.append(int(f[4:-4]))
             except ValueError:
-                print(f"Error: Found file '{f}' in {existing_run} with invalid format'. Aborting.")
+                print("Error: Found file '{}' in {} with invalid format'. Aborting.".format(f, existing_run))
                 exit(1)
         
         existing_indices.sort()
         num_existing = len(existing_indices)
 
         if num_existing > 0 and existing_indices != list(range(num_existing)):
-            print(f"Error: The files in {existing_run} are not numbered sequentially.")
+            print("Error: The files in {} are not numbered sequentially.".format(existing_run))
             print("Aborting...")
             exit(1)
         
         if num_existing >= target_num_experiments:
-            print(f"Found existing run at {existing_run} with {num_existing} experiments. Target is {target_num_experiments}. Skipping...")
+            print("Found existing run at {} with {} experiments. Target is {}. Skipping...".format(existing_run, num_existing, target_num_experiments))
         else:
             needed = target_num_experiments - num_existing
-            print(f"Found existing run at {existing_run} with {num_existing} experiments. Target is {target_num_experiments}. Running {needed} more...")
+            print("Found existing run at {} with {} experiments. Target is {}. Running {} more...".format(existing_run, num_existing, target_num_experiments, needed))
             runner_params["num_experiments"] = needed
             runner_params["save_dir"] = existing_run
             runner_params["start_idx"] = num_existing
@@ -332,7 +332,7 @@ if __name__ == "__main__":
         os.makedirs(save_dir, exist_ok=True)
         
         OmegaConf.save(config=OmegaConf.create(config), f=os.path.join(save_dir, "config.yaml"))
-        print(f"Created new run directory: {save_dir}")
+        print("Created new run directory: {}".format(save_dir))
 
         runner_params["save_dir"] = save_dir
         runner_params["start_idx"] = 0
