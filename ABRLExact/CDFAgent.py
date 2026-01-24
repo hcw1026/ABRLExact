@@ -5,6 +5,7 @@ from tqdm.auto import tqdm
 
 import numpy as np
 from scipy import stats
+from scipy.special import logsumexp
 
 from ABRLExact.utils import sample_path_with_prob, add_obs, get_all_deterministic_paths, get_all_stochastic_paths
 
@@ -602,6 +603,7 @@ def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state
         tt = time.time() ###
 
     pos_samples = []
+    log_weights = []
     if bootstrap_mode == 2:
         bootstrap_list = bootstrap
     else:
@@ -620,11 +622,18 @@ def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state
         if len(obs["rewards"]) > 0:
             expected_q_mode = 0 if bootstrap_mode == 2 else bootstrap_mode
             expected_q = expected_q_max(mean=b_mean, cov=b_cov, env=env, obs=obs, n_samples=num_bs_samples, mode=expected_q_mode)
-            pos_mean = (sigma**2) * pos_cov_  @ (obs["rewards"] + expected_q)
+            y = np.array(obs["rewards"]) + expected_q
+            pos_mean = (sigma**2) * pos_cov_  @ y
             pos_samples.append((pos_mean, pos_cov))
+            
+            log_weights.append(-0.5 * (y @ Gamma @ y))
         else:
             pos_mean = np.zeros(theta_len)
             pos_samples.append((pos_mean, pos_cov))
+            log_weights.append(0.0)
+
+    log_weights = np.array(log_weights)
+    weights = np.exp(log_weights - logsumexp(log_weights))
 
     if profile:
         print(f"Zone C {time.time() - tt}") ###
@@ -649,21 +658,20 @@ def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state
             print(f"Zone D {time.time() - tt}") ###
             tt = time.time() ###
 
-        pEstarr_array_sum = np.zeros(len(action_q_list))
-        for pos_mean, pos_cov in pos_samples:
-            for action_idx in range(len(action_q_list)):
-                D_star = D_star_list[action_idx]
-
-                if (not D_star.shape == ()) and (len(D_star) > 0): # if it is not np.array(None)
+        pEstarr_array = np.zeros(len(action_q_list))
+        for action_idx in range(len(action_q_list)):
+            D_star = D_star_list[action_idx]
+            if (not D_star.shape == ()) and (len(D_star) > 0): # if it is not np.array(None)
+                for i, (pos_mean, pos_cov) in enumerate(pos_samples):
+                    w = weights[i]
                     pEstarr_mean = D_star @ pos_mean # transformed posterior mean for cdf for E^*
                     pEstarr_cov = D_star @ pos_cov @ D_star.T # transformed posterior covariance for cdf for E^*
-                    pEstarr_array_sum[action_idx] += mvn_cdf(lower=np.zeros(len(D_star)), mean=pEstarr_mean, cov=pEstarr_cov, abseps=abseps, 
+                    pEstarr_array[action_idx] += w * mvn_cdf(lower=np.zeros(len(D_star)), mean=pEstarr_mean, cov=pEstarr_cov, abseps=abseps, 
                                                             use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, qmc_base_cache=qmc_base_cache)
-                elif D_star.shape == (0,): # no constraint, it is np.array([]), so return the probability of the sample space, which is 1
-                    pEstarr_array_sum[action_idx] += 1.
-                else: #if it is np.array(None), prob is 0
-                    pEstarr_array_sum[action_idx] += 0.
-        pEstarr_array = pEstarr_array_sum / len(pos_samples)
+            elif D_star.shape == (0,): # no constraint, it is np.array([]), so return the probability of the sample space, which is 1
+                pEstarr_array[action_idx] = 1.
+            else: #if it is np.array(None), prob is 0
+                pEstarr_array[action_idx] = 0.
 
     elif mode == 1:
         D_star = []
@@ -682,18 +690,19 @@ def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state
             print(f"Zone D {time.time() - tt}") ###
             tt = time.time() ###
 
-        pEstarr_sum = 0.
-        for pos_mean, pos_cov in pos_samples:
-            if (not D_star.shape == ()) and (len(D_star) > 0): #if it is not np.array(None)
+        if (not D_star.shape == ()) and (len(D_star) > 0): #if it is not np.array(None)
+            pEstarr_sum = 0.
+            for i, (pos_mean, pos_cov) in enumerate(pos_samples):
+                w = weights[i]
                 pEstarr_mean = D_star @ pos_mean
                 pEstarr_cov = D_star @ pos_cov @ D_star.T
-                pEstarr_sum += mvn_cdf(lower=np.zeros(len(D_star)), mean=pEstarr_mean, cov=pEstarr_cov, abseps=abseps, 
+                pEstarr_sum += w * mvn_cdf(lower=np.zeros(len(D_star)), mean=pEstarr_mean, cov=pEstarr_cov, abseps=abseps, 
                                         use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, qmc_base_cache=qmc_base_cache)
-            elif D_star.shape == (0,): # no constraint
-                pEstarr_sum += 1.
-            else: #if it is np.array(None), prob is 0
-                pEstarr_sum += 0.
-        pEstarr = pEstarr_sum / len(pos_samples)
+            pEstarr = pEstarr_sum
+        elif D_star.shape == (0,): # no constraint
+            pEstarr = 1.
+        else: #if it is np.array(None), prob is 0
+            pEstarr = 0.
 
     if profile:
         print(f"Zone E {time.time() - tt}") ###
