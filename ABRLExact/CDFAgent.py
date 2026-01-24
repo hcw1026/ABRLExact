@@ -620,7 +620,7 @@ def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state
     for b_pair in bootstrap_list:
         b_mean, b_cov = b_pair
         if len(obs["rewards"]) > 0:
-            expected_q_mode = 0 if bootstrap_mode == 2 else bootstrap_mode
+            expected_q_mode = 1 if bootstrap_mode == 2 else bootstrap_mode
             expected_q = expected_q_max(mean=b_mean, cov=b_cov, env=env, obs=obs, n_samples=num_bs_samples, mode=expected_q_mode)
             y = np.array(obs["rewards"]) + expected_q
             pos_mean = (sigma**2) * pos_cov_  @ y
@@ -708,7 +708,11 @@ def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state
         print(f"Zone E {time.time() - tt}") ###
 
     if bootstrap_mode == 2:
-        bootstrap_out = pos_samples
+        indices = np.random.choice(len(pos_samples), size=len(pos_samples), p=weights)
+        common_cov = pos_samples[0][1]
+        selected_means = np.array([pos_samples[i][0] for i in indices])
+        new_means = selected_means + stats.multivariate_normal.rvs(mean=np.zeros(len(common_cov)), cov=common_cov, size=len(pos_samples)).reshape(len(pos_samples), -1)
+        bootstrap_out = [(new_means[i], common_cov) for i in range(len(new_means))]
     else:
         bootstrap_out = pos_samples[0]
 
