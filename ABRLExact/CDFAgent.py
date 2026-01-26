@@ -547,11 +547,11 @@ def expected_q_max(mean, cov, env, obs, n_samples=100000, mode=0):
     Docstring for expected_q_max
     mode: int, (0,1):
         if mode == 0, use expected_q_max_mc
-        if mode == 1, use expected_q_max_bias
+        if mode == 1 or 2, use expected_q_max_bias
     """
     if mode == 0:
         return expected_q_max_mc(mean=mean, cov=cov, env=env, obs=obs, n_samples=n_samples)
-    elif mode == 1:
+    elif mode in (1,2):
         return expected_q_max_bias(estimate=mean, env=env, obs=obs)
 
 
@@ -620,16 +620,15 @@ def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state
     for b_pair in bootstrap_list:
         b_mean, b_cov = b_pair
         if len(obs["rewards"]) > 0:
-            expected_q_mode = 1 if bootstrap_mode == 2 else bootstrap_mode
-            expected_q = expected_q_max(mean=b_mean, cov=b_cov, env=env, obs=obs, n_samples=num_bs_samples, mode=expected_q_mode)
+            expected_q = expected_q_max(mean=b_mean, cov=b_cov, env=env, obs=obs, n_samples=num_bs_samples, mode=bootstrap_mode)
             y = np.array(obs["rewards"]) + expected_q
             pos_mean = (sigma**2) * pos_cov_  @ y
             pos_samples.append((pos_mean, pos_cov))
             
-            log_weights.append(-0.5 * (y @ Gamma @ y))
+            log_weights.append(-0.5 * (y @ Gamma @ y)) # marginal Gaussian p(y) = N(y; 0, Gamma_inv)
         else:
             pos_mean = np.zeros(theta_len)
-            pos_samples.append((pos_mean, pos_cov))
+            pos_samples.append((pos_mean, pos_cov)) # prior
             log_weights.append(0.0)
 
     log_weights = np.array(log_weights)
@@ -707,7 +706,7 @@ def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state
     if profile:
         print(f"Zone E {time.time() - tt}") ###
 
-    if bootstrap_mode == 2:
+    if bootstrap_mode == 2: # resample from the mixture of Gaussian, and set same covariance (unused) for completeness
         indices = np.random.choice(len(pos_samples), size=len(pos_samples), p=weights)
         common_cov = pos_samples[0][1]
         selected_means = np.array([pos_samples[i][0] for i in indices])
@@ -767,7 +766,7 @@ def _run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, bootstrap_mod
     obs_cache = {}
     for s in env.get_all_states(): # compute initial marginal prob of state optimality
         if s not in env.get_all_terminal_states():
-            if use_bootstrap:
+            if use_bootstrap: # use initial bootstrap
                 res = cdf_bs_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, bootstrap=bootstrap, bootstrap_mode=bootstrap_mode, state_q=s, use_qmc=use_qmc, num_bs_samples=num_bs_samples, qmc_sobol_power=qmc_sobol_power)
             else:
                 res = cdf_solution(obs=obs, env=env, epsilon=epsilon, sigma=sigma, state_q=s, normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=obs_cache)

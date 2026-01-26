@@ -1,9 +1,9 @@
 # Environment settings
 name: DeepSea
-depth: 5
-deterministic_transition: true
+depth: 4
+deterministic_transition: false
 penalty: 0.03
-sto_trans_prob: null
+sto_trans_prob: 0.1
 randomised_actions: true
 randomised_action_seed: null
 
@@ -12,6 +12,6 @@ method: cdf_bs1
 epsilon: 0.01
 sigma: 10
 num_episodes: 100
-use_qmc: true
+use_qmc: false
 qmc_sobol_power: 15
 output_obs: true
