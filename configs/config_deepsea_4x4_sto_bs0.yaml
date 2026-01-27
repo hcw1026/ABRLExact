@@ -15,4 +15,4 @@ num_episodes: 100
 use_qmc: false
 qmc_sobol_power: 15
 output_obs: true
-num_bs_samples: 100000
+num_bs_samples: 10000
