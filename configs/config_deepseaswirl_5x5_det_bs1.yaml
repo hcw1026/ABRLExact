@@ -1,0 +1,17 @@
+# Environment settings
+name: DeepSeaSwirl
+depth: 5
+deterministic_transition: true
+penalty: 0.03
+sto_trans_prob: null
+randomised_actions: true
+randomised_action_seed: null
+
+# Experiment settings
+method: cdf_bs1
+epsilon: 0.01
+sigma: 10
+num_episodes: 100
+use_qmc: true
+qmc_sobol_power: 15
+output_obs: true
