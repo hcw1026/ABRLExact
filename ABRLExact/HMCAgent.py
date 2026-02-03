@@ -77,7 +77,7 @@ class pyro_model_deepsea:
                                                next_states_batch=next_states_batch,
                                                trans_probs_batch=trans_probs_batch)
 
-        mean = curr_q - torch.where(done_batch == 1, torch.zeros_like(expected_next_q), expected_next_q)
+        mean = curr_q - expected_next_q
 
         with pyro.plate("data", n):
             pyro.sample("obs", ndist.Normal(loc=mean, scale=self.epsilon), obs=reward_batch)
@@ -142,8 +142,11 @@ def warmup(model, data, initial_step_size, num_steps, num_samples_per_run, num_r
         accept_prob = pyro_mcmc.diagnostics()["acceptance rate"]["chain 0"]
         if accept_prob < target_acc_prob: # decrease step size
             current_action = "decrease"
-            if accept_prob < 0.1 and last_safe_params is not None:
-                current_params = last_safe_params
+            if accept_prob < 0.1:
+                if last_safe_params is not None:
+                    current_params = last_safe_params
+                else:
+                    current_params = initial_params
             else:
                 current_params = final_params
 
@@ -291,7 +294,8 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
         if output_obs is True:
             obs_history.append(deepcopy(obs))
 
-        fitted_diag_std = torch.tensor(np.std(all_q_samples, axis=0, ddof=1))
+        k = min(1, len(all_q_samples) // 2)
+        fitted_diag_std = torch.tensor(np.std(all_q_samples[k:], axis=0, ddof=1) + 1e-3) # to ensure it is non-zero
         q_sample, step_size, all_q_samples, acc_prob = sample_q_mcmc(obs=obs, env=env, epsilon=epsilon, sigma=sigma, num_samples=num_samples, 
                                                                 step_size=step_size, num_steps=num_steps, num_warmup_runs=num_warmup_runs,
                                                                 num_warmup_samples_per_run=num_warmup_samples_per_run, fitted_diag_std=fitted_diag_std, 
