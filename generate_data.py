@@ -283,7 +283,7 @@ if __name__ == "__main__":
 
         runner_params.update({
             "num_samples": config["num_samples"],
-            "step_size": config["step_size"],
+            "step_size": config.get("step_size", 0.01),
             "num_steps": config["num_steps"],
             "num_warmup_runs": config["num_warmup_runs"],
             "num_warmup_samples_per_run": config["num_warmup_samples_per_run"],

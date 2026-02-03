@@ -10,22 +10,6 @@ from scipy.special import logsumexp
 from ABRLExact.utils import sample_path_with_prob, add_obs, get_all_deterministic_paths, get_all_stochastic_paths
 
 
-
-# def sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, batch_size=1024, cache=None):
-#     path_probs = []
-#     internal_cache = cache if cache is not None else {}
-#     for path in all_paths:
-#         state_q_list, action_q_list = zip(*path)
-#         prob = cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=state_q_list, action_q_list=action_q_list,
-#                              normalise=False, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=internal_cache)
-#         path_probs.append(prob)
-
-#     path_probs = np.array(path_probs)
-#     path_probs_sum = np.sum(path_probs)
-#     path_probs = path_probs / path_probs_sum
-
-#     return sample_path_with_prob(all_paths, path_probs)
-
 def sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, batch_size=1024, cache=None):
     return _sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=cache, bootstrap=None)
 
@@ -499,7 +483,7 @@ def cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, acti
 
 def expected_q_max_mc(mean, cov, env, obs, n_samples=100000):
 
-    samples = stats.multivariate_normal.rvs(mean=mean, cov=cov, size=n_samples)
+    samples = np.atleast_2d(stats.multivariate_normal.rvs(mean=mean, cov=cov, size=n_samples))
     goal_states = env.get_all_terminal_states()
 
     next_states_set = set()
@@ -722,6 +706,29 @@ def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state
     
     
 def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, output_obs=False, batch_size=1024, save_path=None, disable_tqdm=False, tqdm_position=None):
+    """
+    Parameters
+    ---------- 
+    env: env object from environment.py
+        - a initialised deep sea environment object
+    epsilon: float
+        - tolerance of the likelihood kernel (standard deviation)
+    sigma: float
+        - Isotopic Gaussian prior standard deviation
+    num_episodes: int
+        - Number of episodes
+    use_qmc: bool
+        - If True, qausi Monte Carlo is used 
+    qmc_sobol_power: Description
+    output_obs: Description
+    batch_size: Description
+    save_path: Description
+    disable_tqdm: Description
+    tqdm_position: Description
+    
+    Returns
+    -------
+    """
     return _run_cdf_deepsea(env=env, epsilon=epsilon, sigma=sigma, num_episodes=num_episodes, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, output_obs=output_obs, batch_size=batch_size, save_path=save_path, use_bootstrap=False, disable_tqdm=disable_tqdm, tqdm_position=tqdm_position)
 
 

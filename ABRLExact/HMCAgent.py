@@ -129,7 +129,7 @@ def warmup(model, data, initial_step_size, num_steps, num_samples_per_run, num_r
         pyro_mcmc = pyro.infer.mcmc.MCMC(kernel=kernel, 
                                     num_samples=num_samples_per_run,
                                     num_chains=1,
-                                    initial_params={param_name:initial_params},
+                                    initial_params={param_name:current_params},
                                     warmup_steps=0,
                                     disable_progbar=disable_progbar)
 
