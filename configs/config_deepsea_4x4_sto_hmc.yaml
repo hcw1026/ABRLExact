@@ -2,7 +2,7 @@
 name: DeepSea
 depth: 4
 deterministic_transition: false
-penalty: 0.03
+penalty: 0.0375
 sto_trans_prob: 0.1
 randomised_actions: true
 randomised_action_seed: null
