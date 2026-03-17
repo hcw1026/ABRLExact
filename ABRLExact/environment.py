@@ -69,8 +69,8 @@ class DeepSea:
                 trans_mat[row, col, left_action] = [next_row, next_col_left]
                 trans_mat[row, col, right_action] = [next_row, next_col_right]
 
-                reward_mat[row, col, left_action] = reward_[1] #action right yields negative rewards
-                reward_mat[row, col, right_action] = reward_[0] #action left yields negative rewards
+                reward_mat[row, col, left_action] = reward_[1] #action left yields positive rewards
+                reward_mat[row, col, right_action] = reward_[0] #action right yields negative rewards
 
         reward_mat[row, col, 1 - action_mat[-1, -1]] += self.treasure
                 
@@ -299,8 +299,8 @@ class DeepSeaSwirl(DeepSea):
                 trans_mat[row, col, left_action] = [next_row, next_col_left]
                 trans_mat[row, col, right_action] = [next_row, next_col_right]
 
-                reward_mat[row, col, left_action] = reward_[1] #action right yields negative rewards
-                reward_mat[row, col, right_action] = reward_[0] #action left yields negative rewards
+                reward_mat[row, col, left_action] = reward_[1] #action left yields positive rewards
+                reward_mat[row, col, right_action] = reward_[0] #action right yields negative rewards
 
                 # swirl
                 if row % 3 == 1:

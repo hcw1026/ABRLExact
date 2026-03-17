@@ -1,0 +1,17 @@
+# Environment settings
+name: DeepSea
+depth: 3
+deterministic_transition: true
+penalty: 0.0033333
+sto_trans_prob: null
+randomised_actions: true
+randomised_action_seed: null
+
+# Experiment settings
+method: cdf
+epsilon: 0.01
+sigma: 10
+num_episodes: 54
+use_qmc: true
+qmc_sobol_power: 15
+output_obs: true
