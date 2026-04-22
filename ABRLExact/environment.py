@@ -9,14 +9,33 @@ import torch
 
 
 class DeepSea:
-    def __init__(self, depth, starting_state=(0,0), goal_state=(-1,-1), deterministic_transition=True, action_map=None, randomised_actions=False, 
+    """Deep sea environment."""
+    def __init__(self, depth, starting_state=(0,0), deterministic_transition=True, action_map=None, randomised_actions=False, 
                  randomised_action_seed=None, penalty=None, sto_trans_prob=None):
+        """
+        Parameters
+        ----------
+        depth: int
+            - the depth of the sea, i.e. the minimum number of actions required to reach the goal from the top-left state
+        starting_state: tuple
+            - the initial state of the form (int, int), where the top-left is (0,0)
+        deterministic_transition: bool
+            - if True, all transitions are deterministic; otherwise, the correct action (other than the final row action) follows the specified action with a probability of 1-sto_trans_prob
+        action_map: None or np.ndarray
+            - the map of actions (0,1) to left and right. If None, action 0 corresponds to right if randomised_actions is False, otherwise a randomised action_map is generated; if specified, the entry corresponds to the action label of the left action
+        randomised_actions: bool
+            - if True, a randomised action_map is generated if action_map is None; otherwise the action map follows that specified by action_map
+        randomised_action_seed: None or int
+            - the seed for randomised actions when it is specified
+        penalty: None or float
+            - the reward for moving left and the negative reward of moving right. If None, it is set to 1/(100*depth)
+        sto_trans_prob: None or float
+            - the probability of taking the opposite action of what is specified by the agent if deterministic_transition is False. When deterministic_transition is False and sto_trans_prob
+            is None, it is set to 1/depth
+        """
         self.env_name = 'Deepsea'
         self.depth = depth
         self.starting_state = starting_state
-        if goal_state == (-1, -1):
-            goal_state = (depth - 1, depth - 1 )
-        self.goal_state = goal_state
         self.deterministic_transition = deterministic_transition
         self.randomised_actions = randomised_actions
         self.penalty = penalty
@@ -41,6 +60,7 @@ class DeepSea:
 
 
     def initialise(self):
+        """Initialise action maps, transition matrix and reward matrix."""
 
         if self.action_map is not None:
             action_mat = self.action_map
@@ -77,6 +97,7 @@ class DeepSea:
         return trans_mat, reward_mat, action_mat
 
     def reset(self, state=None):
+        """Reset the internal state to the starting state."""
         if state is None:
             self.state = self.starting_state
         else:
@@ -86,9 +107,11 @@ class DeepSea:
         return self.state
     
     def reward(self, state, action, next_state):  # pylint: disable=unused-argument
+        """Reward function."""
         return self.reward_info[state + (action, )]
     
     def transition(self, state, action):
+        """Transition function / sampler."""
         if self.deterministic_transition or state[0] == self.depth - 1:
             return self.trans_info[state + (action, )]
         else:
@@ -98,19 +121,42 @@ class DeepSea:
                 return self.trans_info[state + (action, )]
 
     def transition_distribution(self, state, action):
+        """Return the transition distribution."""
         if self.deterministic_transition or state[0] == self.depth - 1:
             return {tuple(self.trans_info[state + (action, )].tolist()): 1., tuple(self.trans_info[state + (1 - action, )].tolist()): 0.}
         else:
             return {tuple(self.trans_info[state + (action, )].tolist()): 1 - self.sto_trans_prob, tuple(self.trans_info[state + (1 - action, )].tolist()): self.sto_trans_prob}
     
     def transition_reward(self, state, action):
+        """Return the transition-reward pairs."""
         next_state = tuple([int(i) for i in self.transition(state=state, action=action)])
         return self.reward(state=state, action=action, next_state=next_state), next_state
 
     def is_done(self, next_state):
+        """Check whether the goal has been reached."""
         return next_state[0] == self.depth
     
     def step(self, action, is_simulation=False, simulation_state=None):
+        """Sample the next state.
+        Parameters
+        ----------
+        action: int
+            - the action to take
+        is_simulation: bool
+            - if True, simulation_state is used as the query state; otherwise, the internal state self.state is the query state
+        simulation_state: None, tuple
+            - if is_simulation is True, this is used as the query state
+            
+        Returns
+        -------
+        tuple:
+            - next state
+        float:
+            - reward
+        bool:
+            - whether the goal is reached after taking the action
+        """
+        
 
         if is_simulation:
             assert simulation_state is not None
@@ -132,6 +178,19 @@ class DeepSea:
         return next_state, reward, is_done
     
     def get_state_action_index(self, state, action):
+        """The assigned index (not a bijection) of the state-action pair counting from 0.
+        Parameters
+        ----------
+        state: tuple
+            - the state
+        action: int
+            - the action
+        
+        Returns
+        -------
+        int:
+            - the index
+        """
         return self.index[state[0],state[1],action]
     
     def get_possible_actions(self, state, gym_space=True):
@@ -147,13 +206,28 @@ class DeepSea:
                 return list(range(self.action_space_goal.n))
 
     def get_all_states(self):
+        """Output a list of all states."""
         states = [(i,j)  for i in range(self.depth+1) for j in range(i+1)]
         return states
 
     def get_all_terminal_states(self):
+        """Output a list of all goal states."""
         return [state for state in self.get_all_states() if state[0] == self.depth]
 
     def nu_vectorised(self, state, action):
+        """The assigned bijection index of the input state-action pairs (obtained via vectorisation in numpy).
+        Parameters
+        ----------
+        state: tuple or list of tuple or np.ndarray
+            - the state
+        action: int or list of int or np.ndarray
+            - the action
+        
+        Returns
+        -------
+        int or np.ndarray:
+            - the indices
+        """
 
         state = np.asarray(state)
         action = np.asarray(action)
@@ -171,9 +245,36 @@ class DeepSea:
         return pos
         
     def nu(self, state, action):
+        """The assigned bijection index of the input state-action pairs.
+        Parameters
+        ----------
+        state: tuple
+            - the state
+        action: int
+            - the action
+        
+        Returns
+        -------
+        int:
+            - the index
+        """
         return (state[0])*(state[0]+1)+(state[1])*2+action + 1
         
     def nu_inverse_vectorised(self, pos):
+        """Output the corresponding state-action pairs of the bijection indices.
+        Parameters
+        ----------
+        pos: int or list or np.ndarray
+            - the indices
+
+        Returns
+        -------
+        tuple or np.ndarray
+            - the states
+        int or np.ndarray
+            - the actions
+
+        """
         pos = np.asarray(pos, dtype=np.int64)
         is_pos_0d = (pos.ndim == 0)
 
@@ -189,6 +290,19 @@ class DeepSea:
         return state, action
 
     def nu_inverse(self, pos):
+        """Output the corresponding state-action pair of the bijection index.
+        Parameters
+        ----------
+        pos: int
+            - the index
+        
+        Returns
+        -------
+        state: tuple
+            - the state
+        action: int
+            - the action
+        """
         pos -= 1
         action = pos % 2
         ari_pos = (pos - action) // 2
@@ -200,6 +314,7 @@ class DeepSea:
         return (state0, state1), action
 
     def nu_torch(self, state, action):
+        """A torch version of nu_vectorised."""
         state = torch.as_tensor(state)
         action = torch.as_tensor(action)
 
@@ -208,6 +323,7 @@ class DeepSea:
 
 
     def nu_inverse_torch(self, pos):
+        """A torch version of nu_inverse_vectorised."""
         pos = torch.as_tensor(pos)
 
         pos = pos - 1
@@ -223,9 +339,10 @@ class DeepSea:
 
 
 class DeepSeaPyramid(DeepSea):
-    def __init__(self, depth, starting_state=(0,0), goal_state=(-1,-1), deterministic_transition=True, action_map=None, randomised_actions=False, 
+    """Deep sea pyramid."""
+    def __init__(self, depth, starting_state=(0,0), deterministic_transition=True, action_map=None, randomised_actions=False, 
                  randomised_action_seed=None, sto_trans_prob=None):
-        super().__init__(depth=depth, starting_state=starting_state, goal_state=goal_state, deterministic_transition=deterministic_transition, action_map=action_map,
+        super().__init__(depth=depth, starting_state=starting_state, deterministic_transition=deterministic_transition, action_map=action_map,
                          randomised_actions=randomised_actions, randomised_action_seed=randomised_action_seed, sto_trans_prob=sto_trans_prob)
         
     def initialise(self):
@@ -264,9 +381,10 @@ class DeepSeaPyramid(DeepSea):
 
 
 class DeepSeaSwirl(DeepSea):
-    def __init__(self, depth, starting_state=(0,0), goal_state=(-1,-1), deterministic_transition=True, action_map=None, randomised_actions=False, 
+    """Deep sea swirl."""
+    def __init__(self, depth, starting_state=(0,0), deterministic_transition=True, action_map=None, randomised_actions=False, 
                  randomised_action_seed=None, penalty=None, sto_trans_prob=None):
-        super().__init__(depth=depth, starting_state=starting_state, goal_state=goal_state, deterministic_transition=deterministic_transition, action_map=action_map,
+        super().__init__(depth=depth, starting_state=starting_state, deterministic_transition=deterministic_transition, action_map=action_map,
                          randomised_actions=randomised_actions, randomised_action_seed=randomised_action_seed, penalty=penalty, sto_trans_prob=sto_trans_prob)
         
     def initialise(self):
@@ -325,6 +443,7 @@ class DeepSeaSwirl(DeepSea):
 
 
 class fourDMDP:
+    """A test MDP."""
     def __init__(self):
         self.starting_state = 1
         self.state = self.starting_state

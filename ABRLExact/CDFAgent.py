@@ -11,10 +11,41 @@ from ABRLExact.utils import sample_path_with_prob, add_obs, get_all_deterministi
 
 
 def sample_path(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, batch_size=1024, cache=None):
+    """Posterior sampling for optimal policies for Bayes-BR.
+    Parameters
+    ----------
+    all_paths: list of list of tuples
+        - a list of all paths where each path is a state-action pair
+    See cdf_solution() for the rest.
+    
+    Returns
+    -------
+    dict:
+        - a sampled policy, where the keys are the states, and the values are the corresponding actions
+    np.ndarray:
+        - the posterior probabilities of optimality of each policy specified by all_paths
+    """
     return _sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, batch_size=batch_size, cache=cache, bootstrap=None)
 
 
 def sample_path_bs(obs, env, epsilon, sigma, all_paths, use_qmc=False, qmc_sobol_power=18, bootstrap=None, bootstrap_mode=0, num_bs_samples=10000):
+    """Posterior sampling for optimal policies for Bayes-TD-based methods.
+    Parameters
+    ----------
+    all_paths: list of list of tuples
+        - a list of all paths where each path is a state-action pair
+    See cdf_solution() for the rest.
+    
+    Returns
+    -------
+    dict:
+        - a sampled policy, where the keys are the states, and the values are the corresponding actions
+    np.ndarray:
+        - the posterior probabilities of optimality of each policy specified by all_paths
+    tuple of np.ndarray or list of tuples of np.ndarray:
+        - the bootstrap of the new posterior distribution
+    
+    """
     return _sample_path(obs=obs, env=env, epsilon=epsilon, sigma=sigma, all_paths=all_paths, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, 
                         batch_size=None, cache=None, bootstrap=bootstrap, bootstrap_mode=bootstrap_mode, num_bs_samples=num_bs_samples)
 
@@ -154,17 +185,50 @@ def qmc_prep_helper_bs(use_qmc, state_q, state_q_list, action_q_list, permissibl
     
     
 def cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, action_q_list=None, abseps=1e-5, normalise=True, use_qmc=False, qmc_sobol_power=10, batch_size=1024, profile=False, cache=None):
-    '''
+    """Compute the posterior probabilities using the formula (by computing the CDF) -- BayesBR.
+    Parameters
+    ----------
     obs: dictionary of state0, action, state1, rewards
+        - the observed data
     env: initialised MDP class
-    epsilon: likelihood variance
-    sigma: prior variance
-    state_q: If query is for the probability of optimality of actions of a given state_q, set state_q
-    state_q_list: If query is for the probability of optimality of a sequence of state action pairs, set state_q_list and action_q_list instead, and keep state_q as None
-    action_q_list: same as state_q_list
-    cache: to be used for future runs when everything but state_q_list and action_q_list remain the same. If None, no cache will be used and no cache will be returned; else cache
-           cached data will also be returned (incl. if cache is False). If cache is a dictionary containing "pr_vec", "pos_mean_vec", "pos_cov_vec", cache data will be used for computation
-    '''
+        - a class containing methods .get_all_states, .get_all_terminal_states, .get_possible_actions, .nu, .nu_vectorised
+    epsilon: float
+        - likelihood standard deviation
+    sigma: float
+        - prior standard deviation
+    state_q: None or int or tuple
+        - If query is for the probability of optimality of actions of a given state_q, set state_q, otherwise set to None
+    state_q_list: None or list of int or list of tuples
+        - If query is for the probability of optimality of a sequence of state action pairs, set state_q_list and action_q_list instead, and keep state_q as None. Otherwise, set to None
+    action_q_list: None or list of int
+        - Same as state_q_list, but for associated actions of states in state_q_list
+    abseps: float
+        - abseps of scipy.stats.multivariate_normal when it is used to compute Gaussian integrals
+    normalise: bool
+        - if True, the normalising constant of the posterior probabilities are computed via the formula; otherwise, self normalisation is used when state_q is not None, or no normalisation is performed (the output is unnormalised) when state_q is not None
+    use_qmc: bool
+        - if True, Quasi Monte Carlo is used instead of scipy.stats.multivariate_normal for computing the Gaussian integrals
+    qmc_sobol_power: int
+        - 2^qmc_sobol_power number of Sobol sequence is used to construct the QMC estimate when use_qmc is True
+    batch_size: int
+        - the dimension of vectorisation (for memory consumption management)
+    profile: bool
+        - if True, time profiling info is printed for diagnostics
+    cache: dictionary or None
+        - dictionary to be used for subsequent runs when everything but state_q_list and action_q_list remain the same. If None, no cache will be used and no cache will be returned; else if cache 
+        is an empty dictionary, cached data will be stored in the input dictionary, else if cache is a dictionary containing "pr_vec", "pos_mean_vec", "pos_cov_vec", cache data will be used for computation
+    
+    Returns
+    -------
+    if state_q is None:
+        float:
+            - the unnormalised posterior probability is output if normalise is False, else the normalised probability, of the optimality probability specified by state_q_list and action_q_list
+    if state_q is not None:  
+        np.ndarray: 
+            - the normalised posterior probabilities is output for each action of state_q
+        list:
+            - the corresponding action_q_list is output (in an order that matches the posterior probabilities, which is the same as the input)
+    """
     
     
 
@@ -482,6 +546,25 @@ def cdf_solution(obs, env, epsilon, sigma, state_q=None, state_q_list=None, acti
 
 
 def expected_q_max_mc(mean, cov, env, obs, n_samples=100000):
+    """Monte Carlo estimation of E[max_{a'} Q_theta(s,a')].
+    Parameters
+    ---------- 
+    mean: np.ndarray
+        - the (posterior) mean of the parameter
+    cov: np.ndarray
+        - the (posterior) covariance of the parameter
+    env: initialised MDP class
+        - a class containing methods .get_all_states, .get_all_terminal_states, .get_possible_actions, .nu, .nu_vectorised
+    obs: dictionary of state0, action, state1, rewards
+        - the observed data
+    n_samples: int
+        - the number of Monte Carlo samples of theta for estimating E[max_{a'} Q_theta(s,a')]
+        
+    Returns
+    -------
+    np.ndarray:
+        - a Monte Carlo estimation of E[max_{a'} Q_theta(s,a')]
+    """
 
     samples = np.atleast_2d(stats.multivariate_normal.rvs(mean=mean, cov=cov, size=n_samples))
     goal_states = env.get_all_terminal_states()
@@ -513,6 +596,22 @@ def expected_q_max_mc(mean, cov, env, obs, n_samples=100000):
     return expected_max
 
 def expected_q_max_bias(estimate, env, obs):
+    """Compute E[max_{a'} Q_theta(s,a')] for a given theta.
+    Parameters
+    ----------
+    estimate: np.ndarray
+        - a plug-in estimate of theta of Q_theta
+    env: initialised MDP class
+        - a class containing methods .get_all_states, .get_all_terminal_states, .get_possible_actions, .nu, .nu_vectorised
+    obs: dictionary of state0, action, state1, rewards
+        - the observed data
+    
+    Returns
+    -------
+    np.ndarray:
+        -  E[max_{a'} Q_theta(s,a')] for the given estimate of theta
+    """
+    
     goal_states = env.get_all_terminal_states()
     expected_max = np.zeros(len(obs["state0"]))
 
@@ -527,11 +626,17 @@ def expected_q_max_bias(estimate, env, obs):
     return expected_max
 
 def expected_q_max(mean, cov, env, obs, n_samples=100000, mode=0):
-    """
-    Docstring for expected_q_max
-    mode: int, (0,1):
-        if mode == 0, use expected_q_max_mc
-        if mode == 1 or 2, use expected_q_max_bias
+    """Helper function for choosing between expected_q_max_mc and expected_q_max_bias.
+    Parameters
+    ----------
+    mode: int, {0, 1, 2}
+        - if mode == 0, use expected_q_max_mc (Bayes-TD-Max); if mode == 1 (Bayes-TD) or 2 (Bayes-TD-En), use expected_q_max_bias
+        
+    Returns
+    -------
+    np.ndarray:
+        - the output of expected_q_max_mc or expected_q_max_bias
+        
     """
     if mode == 0:
         return expected_q_max_mc(mean=mean, cov=cov, env=env, obs=obs, n_samples=n_samples)
@@ -540,6 +645,33 @@ def expected_q_max(mean, cov, env, obs, n_samples=100000, mode=0):
 
 
 def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state_q=None, state_q_list=None, action_q_list=None, abseps=1e-5, num_bs_samples=10000, use_qmc=False, qmc_sobol_power=10, profile=False):
+    """Compute the posterior probabilities of Bayes-TD-based methods.
+    Parameters
+    ----------
+    bootstrap: tuple of np.ndarray or list of tuples of np.ndarray
+        - if bootstrap_mode == 0, bootstrap should be the (mean, cov) of the posterior distribution of Q_theta of the previous iteration; if bootstrap_mode == 1, bootstrap should be (mean, cov), where cov is not used; 
+        if bootstrap_mode == 2, bootstrap should be a list of (mean, cov) of each mixture in the posterior distribution of Q_theta of the previous iteration. All mean, cov are np.ndarray
+    bootstrap_mode: int, {0, 1, 2}
+        - 0 corresponds to Bayes-TD-Max, 1 corresponds to Bayes-TD, 2 corresponds to Bayes-TD-En
+    num_bs_samples: int
+        - the number of Monte Carlo samples for Bayes-TD-Max
+    See cdf_solution() for the rest.
+    
+    Returns
+    -------
+    if state_q is None:
+        float:
+            - the unnormalised posterior probability is output if normalise is False, else the normalised probability, of the optimality probability specified by state_q_list and action_q_list
+        tuple of np.ndarray or list of tuples of np.ndarray:
+            - the bootstrap of the new posterior distribution
+    if state_q is not None:  
+        np.ndarray: 
+            - the normalised posterior probabilities is output for each action of state_q
+        list:
+            - the corresponding action_q_list is output (in an order that matches the posterior probabilities, which is the same as the input)
+        tuple of np.ndarray or list of tuples of np.ndarray:
+            - the bootstrap of the new posterior distribution
+    """
     if profile:
         tt = time.time() ###
     
@@ -706,28 +838,49 @@ def cdf_bs_solution(obs, env, epsilon, sigma, bootstrap, bootstrap_mode=0, state
     
     
 def run_cdf_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, use_qmc=False, qmc_sobol_power=18, output_obs=False, batch_size=1024, save_path=None, disable_tqdm=False, tqdm_position=None):
-    """
+    """Run a simulation of Bayes-BR or Bayes-TD-based methods.
     Parameters
-    ---------- 
-    env: env object from environment.py
-        - a initialised deep sea environment object
+    ----------
+    env: initialised MDP class
+        - a class containing methods .get_all_states, .get_all_terminal_states, .get_possible_actions, .nu, .nu_vectorised
     epsilon: float
-        - tolerance of the likelihood kernel (standard deviation)
+        - likelihood standard deviation
     sigma: float
-        - Isotopic Gaussian prior standard deviation
+        - prior standard deviation
     num_episodes: int
         - Number of episodes
     use_qmc: bool
-        - If True, qausi Monte Carlo is used 
-    qmc_sobol_power: Description
-    output_obs: Description
-    batch_size: Description
-    save_path: Description
-    disable_tqdm: Description
-    tqdm_position: Description
+        - if True, Quasi Monte Carlo is used instead of scipy.stats.multivariate_normal for computing the Gaussian integrals
+    qmc_sobol_power: int
+        - 2^qmc_sobol_power number of Sobol sequence is used to construct the QMC estimate when use_qmc is True
+    output_obs: bool
+        - if True, observation history is output
+    batch_size: int
+        - the dimension of vectorisation (for memory consumption management)
+    save_path: None or str
+        - if not None, the output is saved to save_path (with optional extension .npy)
+    disable_tqdm: bool
+        - if True, tqdm progress bar is disabled
+    tqdm_position: int
+        - worker number (for multi-CPU running)
     
     Returns
     -------
+    list of list of states:
+        - state_history -- a list of histories of states encountered in each episode
+    (list of list of floats, np.ndarray):
+        - (the history of optimality probabilities of each state with action 0 for each episode, the action_map of the environment)
+    (list of list of tuples, list of np.ndarray, bool):
+        - (a list of all paths where each path is a state-action pair, the optimal path probabilities, whether the environment transition is deterministic)
+    list of list of floats:
+        - reward history -- a list of histories of rewards encountered in each episode
+    list of dictionaries (optional):
+        - observation history -- a list of observations in the form of dictionaries state0, action, state1, rewards. This is only output if output_obs is True
+    
+    Saved output
+    ------------
+    dict: 
+        - with keys: state_history, probs_data, paths_data, reward_history, obs_history (optional) in the same order as the returns
     """
     return _run_cdf_deepsea(env=env, epsilon=epsilon, sigma=sigma, num_episodes=num_episodes, use_qmc=use_qmc, qmc_sobol_power=qmc_sobol_power, output_obs=output_obs, batch_size=batch_size, save_path=save_path, use_bootstrap=False, disable_tqdm=disable_tqdm, tqdm_position=tqdm_position)
 

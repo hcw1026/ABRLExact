@@ -12,7 +12,23 @@ from ABRLExact.utils import get_default_device, add_obs
 
 
 class pyro_model_deepsea:
+    """A pyro model for running HMC for the deep sea problem."""
     def __init__(self, parameter_dim, env, prior_std=1., epsilon=0.1, device=None):
+        """
+        Parameters
+        ----------
+        parameter_dim: int
+            - the dimension of theta of Q_theta
+        env: an initialised environment
+            - one of the deep sea environments in environment.py
+        prior_std: float
+            - the standard deviation of each dimension of the prior of theta
+        epsilon: float
+            - the likelihood tolerance
+        device: str
+            - device for torch
+        """
+        
         self.parameter_dim = parameter_dim
         self.env = env
         self.prior_std = prior_std
@@ -40,6 +56,13 @@ class pyro_model_deepsea:
         return expected_q
 
     def preprocess_obs(self, obs):
+        """Preprocess observation for pyro models.
+        Parameters
+        ----------
+        obs: dictionary of state0, action, state1, rewards
+            - the observed data
+        """
+        
         state0 = torch.tensor(np.array(obs["state0"]), dtype=torch.long, device=self.device)
         action = torch.tensor(obs["action"], dtype=torch.long, device=self.device)
         reward = torch.tensor(obs["rewards"], dtype=torch.float32, device=self.device)
@@ -60,6 +83,13 @@ class pyro_model_deepsea:
         
         
     def pyro_model(self, data):
+        """The pyro model for HMC without preconditioning.
+        Parameters
+        ----------
+        data: dictionary
+            - the preprocessed observation obtained from .preprocess_obs
+        """
+        
         parameter = pyro.sample("prior_parameter", ndist.Normal(torch.zeros(self.parameter_dim, device=self.device), self.prior_std).to_event(1))
 
         state_batch = data["state0"].to(self.device)
@@ -84,6 +114,15 @@ class pyro_model_deepsea:
 
 
     def pyro_model_tr(self, data, diag_inv_mass_sqrt):
+        """The pyro model for HMC with diagonal preconditioning.
+        Parameters
+        ----------
+        data: dictionary
+            - the preprocessed observation obtained from .preprocess_obs
+        diag_inv_mass_sqrt: np.ndarray
+            - the preconditioning of each dimension of the parameter (the square root of diagonal elements of the inverse of the mass matrix) 
+        """
+        
         parameter_tr = pyro.sample("prior_parameter_tr", ndist.Normal(torch.zeros(self.parameter_dim, device=self.device), self.prior_std / diag_inv_mass_sqrt).to_event(1))
                                                                                                                                   
         parameter = parameter_tr * diag_inv_mass_sqrt
@@ -112,6 +151,43 @@ class pyro_model_deepsea:
             
 def warmup(model, data, initial_step_size, num_steps, num_samples_per_run, num_runs, initial_params, param_name="prior_parameter", diag_inv_mass_sqrt=1., target_acc_prob=0.75, 
            step_size_rates=(1.3, 0.7, 1.1, 0.8), disable_progbar=False):
+    """Warm-up and hyperparameter adaptation of HMC.
+    Parameters
+    ----------
+    model: a pyro model
+        - the model that defines posterior to be sampled from
+    data: dictionary
+        - the preprocessed observation obtained from .preprocess_obs
+    initial_step_size: float
+        - the initial step size of the first warm-up window
+    num_steps: int
+        - the number of leapfrog iterations
+    num_samples_per_run: int
+        - the length of the HMC chain for each warm-up window
+    num_runs: int
+        - the number of warm-up windows
+    initial_params: torch.Tensor
+        - the initialisation of the HMC chain for the first warm-up window
+    param_name: str
+        - the name of the parameter
+    diag_inv_mass_sqrt: np.ndarray
+        - the preconditioning of each dimension of the parameter (the square root of diagonal elements of the inverse of the mass matrix) 
+    target_acc_prob: float
+        - the target acceptance probability to be achieved at the end of the warm-up
+    step_size_rates: tuple of float
+        - the increase factor of step size before the target_acc_prob is crossed; the decrease factor of step size before the target_acc_prob is crossed;
+        the increase factor of step size after the target_acc_prob is crossed; the decrease factor of step size after the target_acc_prob is crossed
+    disable_progbar: bool
+        - the progress bar is not displayed if True
+    
+    Returns
+    -------
+    float:
+        - the found step size
+    torch.Tensor:
+        - the final parameter from the latest warm-up window associated with the found step size
+    """
+    
     
     step_size = initial_step_size
     current_params = initial_params
@@ -176,6 +252,26 @@ def warmup(model, data, initial_step_size, num_steps, num_samples_per_run, num_r
 
 def sample_q_mcmc(obs, env, epsilon, sigma, num_samples, step_size, num_steps, num_warmup_runs=0, num_warmup_samples_per_run=10, 
                   fitted_diag_std=None, target_acc_prob=0.75, step_size_rates=(1.3, 0.7, 1.1, 0.8), disable_progbar=False):
+    """Posterior sampling for HMC.
+    Parameters
+    ----------
+    obs: dictionary of state0, action, state1, rewards
+        - the observed data
+    fitted_diag_std: None or np.ndarray
+        - If None, preconditioning is not used in HMC sampling; otherwise, fitted_diag_std is the input diag_inv_mass_sqrt of warmup()
+    
+    Returns
+    -------
+    np.ndarray:
+        - the final sample of the HMC chain
+    float:
+        - the used step size for the HMC chain
+    np.ndarray:
+        - all HMC samples after warm-up
+    float:
+        - the acceptance probability of the HMC chain after warm-up
+    """
+    
 
     parameter_dim = (len(env.get_all_states()) - len(env.get_all_terminal_states())) * 2
 
@@ -225,6 +321,65 @@ def run_hmc_deepsea(env, epsilon=0.02, sigma=10, num_episodes=30, num_samples=10
                     step_size=0.01, num_steps=10, num_warmup_runs=10, num_warmup_samples_per_run=10, 
                     target_acc_prob=0.75, step_size_rates=(1.3, 0.7, 1.1, 0.8), disable_progbar=False, 
                     input_obs=None, disable_tqdm=False, tqdm_position=None, output_obs=False, save_path=None):
+    """Run a simulation of HMC.
+    Parameters
+    ----------
+    env: an initialized environment
+        - an instance of a DeepSea environment from environment.py.
+    epsilon: float
+        - likelihood standard deviation
+    sigma: float
+        - prior standard deviation
+    num_episodes: int
+        - number of episodes
+    num_samples: int
+        - number of HMC samples after burn-in and warm-up
+    step_size: float
+        - the initial step size of the first warm-up window of the first episode
+    num_steps: int
+        - the number of Leapfrog steps for each HMC sample
+    num_warmup_runs: int
+        - the number of warm-up windows of each warm-up of each HMC chain
+    num_warmup_samples_per_run: int
+        - the length of the HMC chain for each warm-up window
+    target_acc_prob: float
+        - the target acceptance probability to be achieved at the end of the warm-up for all episodes
+    step_size_rates: tuple of float
+        - the increase factor of step size before the target_acc_prob is crossed; the decrease factor of step size before the target_acc_prob is crossed;
+        the increase factor of step size after the target_acc_prob is crossed; the decrease factor of step size after the target_acc_prob is crossed
+    disable_progbar: bool
+        - the MCMC progress bar is not displayed if True
+    input_obs: None or dict
+        - dictionary of state0, action, state1, rewards. If it is not None, the input_obs is used in place of the generated observations throughout the simulation
+    disable_tqdm: bool
+        - the tqdm progress bar for overall progress is disabled if True
+    tqdm_position: int
+        - worker number (for multi-CPU running)
+    output_obs: bool
+        - if True, observation history is output
+    save_path: None or str
+        - if not None, the output is saved to save_path (with optional extension .npy)
+        
+    Returns
+    -------
+    list of list of tuples:
+        - state_history -- a list of histories of states encountered in each episode
+    list of list of floats:
+        - reward history -- a list of histories of rewards encountered in each episode
+    list of np.ndarray:
+        - sample history -- a list of all HMC samples after warm-up in each episode
+    list of floats:
+        - the acceptance probability of the HMC chain of each episode after warm-up
+    list of dictionaries (optional):
+        - observation history -- a list of observations in the form of dictionaries state0, action, state1, rewards. This is only output if output_obs is True
+    
+    Saved output
+    ------------
+    dict: 
+        - with keys: state_history, reward_history, samples_history, acc_prob_history, obs_history (optional) in the same order as the returns
+
+    """
+    
 
     unique_stat = set()
     obs = {"state0": [], "action": [], "state1": [], "rewards": [], "done": []}

@@ -11,6 +11,7 @@ from omegaconf import OmegaConf
 from ABRLExact.environment import DeepSea, DeepSeaPyramid, DeepSeaSwirl
 from ABRLExact.CDFAgent import run_cdf_deepsea, run_cdf_deepsea_bs
 from ABRLExact.HMCAgent import run_hmc_deepsea
+from ABRLExact.utils import find_existing_run
 
 worker_id = 0
 
@@ -153,27 +154,7 @@ def get_run_name():
     return datetime.datetime.now().strftime("experiment_%Y%m%d_%H%M%S")
 
 
-def find_existing_run(base_dir, config): # pylint: disable=redefined-outer-name
-    if not os.path.exists(base_dir):
-        return None
-    
-    target_config = config.copy()
-    target_config.pop("num_experiments", None)
-    is_cdf_bs1 = target_config.get("method", "").lower() == "cdf_bs1"
-    if is_cdf_bs1:
-        target_config.pop("num_bs_samples", None)
 
-    for entry in os.scandir(base_dir):
-        if entry.is_dir():
-            config_path = os.path.join(entry.path, "config.yaml")
-            if os.path.exists(config_path):
-                existing_config = OmegaConf.to_container(OmegaConf.load(config_path), resolve=True)
-                existing_config.pop("num_experiments", None)
-                if is_cdf_bs1:
-                    existing_config.pop("num_bs_samples", None)
-                if existing_config == target_config:
-                    return entry.path
-    return None
 
 
 def configure_experiment(omega_config): # pylint: disable=redefined-outer-name
