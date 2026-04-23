@@ -5,12 +5,12 @@ This repository contains the code for xxx, including implementations of Bayes-BR
 ## Methods
 
 The core algorithms are implemented via the following main functions:
-* `run_cdf_deepsea`: Implements the **Bayes-BR** method.
-* `run_cdf_deepsea_bs`: Implements the Bayes-TD-based methods. The specific variant is selected via the `bootstrap_mode` argument:
+* `run_cdf_deepsea` (`ABRLExact/CDFAgent.py`): Implements the **Bayes-BR** method.
+* `run_cdf_deepsea_bs` (`ABRLExact/CDFAgent.py`): Implements the Bayes-TD-based methods. The specific variant is selected via the `bootstrap_mode` argument:
   * `0` corresponds to **Bayes-TD-Max**
   * `1` corresponds to **Bayes-TD**
   * `2` corresponds to **Bayes-TD-En**
-* `run_hmc_deepsea`: Implements the **HMC** method.
+* `run_hmc_deepsea` (`ABRLExact/HMCAgent.py`): Implements the **HMC** method.
 
 ## Installation
 
@@ -51,7 +51,7 @@ python generate_data.py configs/config_deepsea_5x5_det.yaml \
 * `--n_jobs`: The number of CPU cores for parallel processing to repeat the experiments, one CPU for one repeat.
 * `--base_dir`: The directory where the experiment output (data) will be saved.
 * `--num_experiments`: The number of repeated experiments to run.
-* `--batch_size`: The vectorisation batch size / dimension for Bayes-BR (for memory management purposes only)
+* `--batch_size`: The vectorisation batch size / dimension for Bayes-BR (for memory management purposes only).
 
 ### Bulk Data Generation
 
