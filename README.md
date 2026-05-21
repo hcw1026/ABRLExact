@@ -1,6 +1,6 @@
-# xxx
+# Bayesian learning for the stochastic shortest path problem
 
-This repository contains the code for xxx, including implementations of Bayes-BR, HMC, and Bayes-TD-based methods.
+This repository contains the code for ``Bayesian learning for the stochastic shortest path problem'', including implementations of Bayes-BR, HMC, and Bayes-TD-based methods.
 
 ## Methods
 
@@ -16,7 +16,7 @@ The core algorithms are implemented via the following main functions:
 
 1. Clone this repository:
    ```bash
-   git clone xxx
+   git clone https://github.com/hcw1026/ABRLExact.git
    cd ABRLExact
    ```
 
